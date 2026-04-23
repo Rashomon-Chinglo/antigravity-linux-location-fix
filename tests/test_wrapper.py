@@ -1,0 +1,59 @@
+"""Tests for ag_warp.wrapper."""
+
+import stat
+from pathlib import Path
+
+from ag_warp.discovery import AntigravityVersion
+from ag_warp.shell import Shell
+from ag_warp.wrapper import inject_wrapper
+
+
+def _make_fake_version(tmp_path: Path) -> AntigravityVersion:
+    """Create a fake unwrapped Antigravity version."""
+    bin_dir = tmp_path / "1.0.0-test" / "bin"
+    bin_dir.mkdir(parents=True)
+    server = bin_dir / "antigravity-server"
+    server.write_bytes(b"\x7fELF_FAKE_BINARY")
+    server.chmod(stat.S_IRWXU)
+    real = bin_dir / "antigravity-server.real"
+    return AntigravityVersion(
+        version="1.0.0-test",
+        bin_dir=bin_dir,
+        server_binary=server,
+        real_binary=real,
+        mtime=0,
+    )
+
+
+def test_inject_wrapper(tmp_path: Path) -> None:
+    version = _make_fake_version(tmp_path)
+    shell = Shell(dry_run=False)
+
+    meta = inject_wrapper(version, "antigravity-warp", shell)
+
+    # Wrapper should exist and contain marker.
+    assert version.server_binary.exists()
+    content = version.server_binary.read_text()
+    assert "# ag-warp wrapper" in content
+    assert "antigravity-warp" in content
+
+    # .real should exist.
+    assert version.real_binary.exists()
+
+    # Metadata should be populated.
+    assert meta["version"] == "1.0.0-test"
+    assert meta["original_sha256"]
+    assert meta["wrapper_sha256"]
+
+
+def test_wrapper_uses_relative_path(tmp_path: Path) -> None:
+    version = _make_fake_version(tmp_path)
+    shell = Shell(dry_run=False)
+
+    inject_wrapper(version, "antigravity-warp", shell)
+
+    content = version.server_binary.read_text()
+    # Should use $(dirname "$0") not absolute path.
+    assert '$(dirname "$0")/antigravity-server.real' in content
+    # Should NOT contain an absolute path to .real.
+    assert str(tmp_path) not in content

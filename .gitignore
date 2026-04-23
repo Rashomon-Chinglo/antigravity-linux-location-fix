@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+uv.lock
+state.json
+/config.json
