@@ -1,0 +1,70 @@
+"""Unified subprocess wrapper. All shell commands go through here.
+
+Provides two entry points:
+- ``run``: for write operations — skipped under ``dry_run``.
+- ``run_read``: for read-only operations — always executes.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from dataclasses import dataclass, field
+
+from rich.console import Console
+
+console = Console(stderr=True)
+
+
+@dataclass
+class Shell:
+    """Thin wrapper around :func:`subprocess.run`.
+
+    When *dry_run* is ``True``, write operations are printed but not executed.
+    """
+
+    dry_run: bool = False
+    _log: list[list[str]] = field(default_factory=list, repr=False)
+
+    # -- write operations (skipped in dry-run) --------------------------------
+
+    def run(
+        self,
+        cmd: list[str],
+        *,
+        check: bool = True,
+        capture: bool = True,
+        input_text: str | None = None,
+        desc: str = "",
+    ) -> subprocess.CompletedProcess[str]:
+        """Execute a write command. Skipped when *dry_run* is ``True``."""
+        if self.dry_run:
+            label = desc or " ".join(cmd)
+            console.print(f"  [dim]dry-run:[/dim] {label}")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        self._log.append(cmd)
+        return subprocess.run(
+            cmd,
+            check=check,
+            capture_output=capture,
+            text=True,
+            input=input_text,
+        )
+
+    # -- read operations (always execute) -------------------------------------
+
+    def run_read(
+        self,
+        cmd: list[str],
+        *,
+        check: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        """Execute a read-only command. Runs even in dry-run mode."""
+        return subprocess.run(cmd, check=check, capture_output=True, text=True)
+
+    # -- helpers --------------------------------------------------------------
+
+    def has_command(self, name: str) -> bool:
+        """Return ``True`` if *name* is available on ``$PATH``."""
+        r = self.run_read(["which", name])
+        return r.returncode == 0
