@@ -50,12 +50,12 @@ _BASE_REQUIRED = [
 ]
 
 # Optional commands (informational only).
-_OPTIONAL = ["docker", "cloudflared"]
+_OPTIONAL = ["docker"]
 
 
 def doctor_check(cfg: AppConfig, shell: Shell, *, verbose: bool = False) -> bool:
     """Return ``True`` if all required system commands are present."""
-    required = _required_commands(cfg)
+    required = _required_commands()
 
     all_ok = True
     for cmd in required:
@@ -67,6 +67,22 @@ def doctor_check(cfg: AppConfig, shell: Shell, *, verbose: bool = False) -> bool
         if not found:
             all_ok = False
 
+    warp_service_ok, warp_service_detail = _check_warp_service(shell)
+    if verbose:
+        icon = "[green]✓[/green]" if warp_service_ok else "[red]✗[/red]"
+        suffix = (
+            f" ({warp_service_detail})"
+            if warp_service_ok
+            else f" [red](REQUIRED: {warp_service_detail})[/red]"
+        )
+        console.print(f"  {icon} warp-svc{suffix}")
+        base_dir_state = "exists" if cfg.antigravity_base_dir.exists() else "not found yet"
+        console.print(
+            f"  [dim]Antigravity base dir: {cfg.antigravity_base_dir} ({base_dir_state})[/dim]"
+        )
+    if not warp_service_ok:
+        all_ok = False
+
     if verbose:
         for cmd in _OPTIONAL:
             found = shell.has_command(cmd)
@@ -77,11 +93,22 @@ def doctor_check(cfg: AppConfig, shell: Shell, *, verbose: bool = False) -> bool
     return all_ok
 
 
-def _required_commands(cfg: AppConfig) -> list[str]:
-    """Return the required command list for the configured supervisor backend."""
-    required = list(_BASE_REQUIRED)
-    required.append("systemctl" if cfg.supervisor.backend == "systemd" else "pm2")
-    return required
+def _required_commands() -> list[str]:
+    """Return the required command list."""
+    return [*_BASE_REQUIRED, "systemctl"]
+
+
+def _check_warp_service(shell: Shell) -> tuple[bool, str]:
+    """Return whether the ``warp-svc`` systemd service is active."""
+    if not shell.has_command("systemctl"):
+        return False, "systemctl missing"
+
+    result = shell.run_read(["systemctl", "is-active", "--quiet", "warp-svc"])
+    if result.returncode == 0:
+        return True, "active"
+
+    detail = result.stderr.strip() or result.stdout.strip() or "inactive"
+    return False, detail
 
 
 # -- port probing -------------------------------------------------------------

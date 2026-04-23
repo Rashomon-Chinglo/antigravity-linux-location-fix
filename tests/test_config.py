@@ -10,7 +10,7 @@ from ag_warp.config import AppConfig, load_config
 def test_defaults() -> None:
     """Pure defaults should produce a valid config."""
     cfg = AppConfig()
-    assert cfg.group_name == "antigravity-warp"
+    assert cfg.group_name == "antigravity-wrap"
     assert cfg.warp.proxy_port == 40000
     assert cfg.singbox.listen_port == 12345
     assert cfg.nftables.redirect_tcp_ports == [80, 443]
@@ -127,3 +127,33 @@ def test_redirect_ports_must_not_be_empty() -> None:
     """The redirect chain needs at least one TCP port to intercept."""
     with pytest.raises(Exception, match="must not be empty"):
         AppConfig.model_validate({"nftables": {"redirect_tcp_ports": []}})
+
+
+def test_invalid_extra_bypass_cidr_rejected() -> None:
+    """Invalid bypass CIDRs should fail during config validation."""
+    with pytest.raises(Exception):
+        AppConfig.model_validate({"nftables": {"extra_bypass_cidrs": ["not-a-cidr"]}})
+
+
+def test_default_antigravity_base_dir_uses_current_home(monkeypatch, tmp_path: Path) -> None:
+    """Without sudo, the current user's home should determine the default path."""
+    monkeypatch.setattr("ag_warp.config._sudo_user_home", lambda: None)
+    monkeypatch.setattr("ag_warp.config.Path.home", lambda: tmp_path)
+
+    cfg = AppConfig()
+
+    assert cfg.antigravity_base_dir == tmp_path / ".antigravity-server" / "bin"
+
+
+def test_default_antigravity_base_dir_prefers_sudo_user_home(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """When invoked via sudo, prefer the original user's Antigravity path."""
+    sudo_home = tmp_path / "ubuntu"
+    monkeypatch.setattr("ag_warp.config._sudo_user_home", lambda: sudo_home)
+    monkeypatch.setattr("ag_warp.config.Path.home", lambda: tmp_path / "root")
+
+    cfg = AppConfig()
+
+    assert cfg.antigravity_base_dir == sudo_home / ".antigravity-server" / "bin"

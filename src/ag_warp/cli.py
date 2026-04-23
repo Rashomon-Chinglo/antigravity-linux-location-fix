@@ -55,6 +55,14 @@ ConfigOption = Annotated[
     Path | None,
     typer.Option("--config", "-c", help="Path to config.json override."),
 ]
+AntigravityBinDirOption = Annotated[
+    Path | None,
+    typer.Option(
+        "--antigravity-bin-dir",
+        "--ag-bin-dir",
+        help="Override Antigravity bin directory (default: auto-detect from current/sudo user).",
+    ),
+]
 DryRunOption = Annotated[
     bool,
     typer.Option("--dry-run", help="Print planned changes without executing."),
@@ -121,6 +129,7 @@ def _acquire_lock() -> Iterator[None]:
 def _load(
     config_path: Path | None,
     *,
+    antigravity_bin_dir: Path | None = None,
     warp_port: int | None = None,
     singbox_port: int | None = None,
 ) -> AppConfig:
@@ -129,6 +138,7 @@ def _load(
         return load_config(
             config_path,
             cli_overrides=_build_cli_overrides(
+                antigravity_bin_dir=antigravity_bin_dir,
                 warp_port=warp_port,
                 singbox_port=singbox_port,
             ),
@@ -140,11 +150,14 @@ def _load(
 
 def _build_cli_overrides(
     *,
+    antigravity_bin_dir: Path | None,
     warp_port: int | None,
     singbox_port: int | None,
 ) -> dict[str, Any] | None:
     """Translate CLI flags into dotted-path config overrides."""
     overrides: dict[str, Any] = {}
+    if antigravity_bin_dir is not None:
+        overrides["antigravity_base_dir"] = antigravity_bin_dir
     if warp_port is not None:
         overrides["warp.proxy_port"] = warp_port
     if singbox_port is not None:
@@ -156,6 +169,7 @@ def _build_runtime(
     *,
     config_path: Path | None,
     dry_run: bool,
+    antigravity_bin_dir: Path | None = None,
     warp_port: int | None = None,
     singbox_port: int | None = None,
 ) -> CommandRuntime:
@@ -163,6 +177,7 @@ def _build_runtime(
     return CommandRuntime(
         config=_load(
             config_path,
+            antigravity_bin_dir=antigravity_bin_dir,
             warp_port=warp_port,
             singbox_port=singbox_port,
         ),
@@ -176,6 +191,7 @@ def _build_runtime(
 @app.command()
 def status(
     config: ConfigOption = None,
+    antigravity_bin_dir: AntigravityBinDirOption = None,
     warp_port: WarpPortOption = None,
     singbox_port: SingboxPortOption = None,
 ) -> None:
@@ -183,6 +199,7 @@ def status(
     runtime = _build_runtime(
         config_path=config,
         dry_run=False,
+        antigravity_bin_dir=antigravity_bin_dir,
         warp_port=warp_port,
         singbox_port=singbox_port,
     )
@@ -201,6 +218,7 @@ def on_cmd(
             help="Skip wrapper injection (for restore service).",
         ),
     ] = False,
+    antigravity_bin_dir: AntigravityBinDirOption = None,
     warp_port: WarpPortOption = None,
     singbox_port: SingboxPortOption = None,
 ) -> None:
@@ -208,6 +226,7 @@ def on_cmd(
     runtime = _build_runtime(
         config_path=config,
         dry_run=dry_run,
+        antigravity_bin_dir=antigravity_bin_dir,
         warp_port=warp_port,
         singbox_port=singbox_port,
     )
@@ -232,6 +251,7 @@ def apply(
         bool,
         typer.Option("--skip-wrapper", help="Skip wrapper injection."),
     ] = False,
+    antigravity_bin_dir: AntigravityBinDirOption = None,
     warp_port: WarpPortOption = None,
     singbox_port: SingboxPortOption = None,
 ) -> None:
@@ -241,6 +261,7 @@ def apply(
         dry_run=dry_run,
         yes=yes,
         skip_wrapper=skip_wrapper,
+        antigravity_bin_dir=antigravity_bin_dir,
         warp_port=warp_port,
         singbox_port=singbox_port,
     )
@@ -255,9 +276,14 @@ def off(
         bool,
         typer.Option("--disconnect-warp", help="Also disconnect WARP."),
     ] = False,
+    antigravity_bin_dir: AntigravityBinDirOption = None,
 ) -> None:
     """Stop runtime interception (keep wrapper, keep state)."""
-    runtime = _build_runtime(config_path=config, dry_run=dry_run)
+    runtime = _build_runtime(
+        config_path=config,
+        dry_run=dry_run,
+        antigravity_bin_dir=antigravity_bin_dir,
+    )
     with _acquire_lock():
         run_off(
             runtime.config,
@@ -274,9 +300,14 @@ def rollback(
     config: ConfigOption = None,
     dry_run: DryRunOption = False,
     yes: YesOption = False,
+    antigravity_bin_dir: AntigravityBinDirOption = None,
 ) -> None:
     """Full rollback: off + safe wrapper restore."""
-    runtime = _build_runtime(config_path=config, dry_run=dry_run)
+    runtime = _build_runtime(
+        config_path=config,
+        dry_run=dry_run,
+        antigravity_bin_dir=antigravity_bin_dir,
+    )
     with _acquire_lock():
         run_rollback(
             runtime.config,
@@ -291,6 +322,7 @@ def rollback(
 @app.command()
 def verify(
     config: ConfigOption = None,
+    antigravity_bin_dir: AntigravityBinDirOption = None,
     warp_port: WarpPortOption = None,
     singbox_port: SingboxPortOption = None,
 ) -> None:
@@ -298,6 +330,7 @@ def verify(
     runtime = _build_runtime(
         config_path=config,
         dry_run=False,
+        antigravity_bin_dir=antigravity_bin_dir,
         warp_port=warp_port,
         singbox_port=singbox_port,
     )
@@ -317,6 +350,7 @@ def verify(
 @app.command(name="dump-config")
 def dump_config(
     config: ConfigOption = None,
+    antigravity_bin_dir: AntigravityBinDirOption = None,
     warp_port: WarpPortOption = None,
     singbox_port: SingboxPortOption = None,
 ) -> None:
@@ -324,6 +358,7 @@ def dump_config(
     runtime = _build_runtime(
         config_path=config,
         dry_run=False,
+        antigravity_bin_dir=antigravity_bin_dir,
         warp_port=warp_port,
         singbox_port=singbox_port,
     )
@@ -333,9 +368,16 @@ def dump_config(
 
 
 @app.command()
-def doctor(config: ConfigOption = None) -> None:
+def doctor(
+    config: ConfigOption = None,
+    antigravity_bin_dir: AntigravityBinDirOption = None,
+) -> None:
     """Check system dependencies."""
-    runtime = _build_runtime(config_path=config, dry_run=False)
+    runtime = _build_runtime(
+        config_path=config,
+        dry_run=False,
+        antigravity_bin_dir=antigravity_bin_dir,
+    )
 
     console.print(f"{render_command_header(command_label('doctor'))}\n")
     ok = doctor_check(runtime.config, runtime.shell, verbose=True)

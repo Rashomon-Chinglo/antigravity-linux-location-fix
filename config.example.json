@@ -1,11 +1,7 @@
 {
-  "group_name": "antigravity-warp",
-  "antigravity_base_dir": "/root/.antigravity-server/bin",
+  "group_name": "antigravity-wrap",
+  "antigravity_base_dir": "/home/your-user/.antigravity-server/bin",
   "state_file": "/var/lib/ag-wrap/state.json",
-
-  "supervisor": {
-    "backend": "systemd"
-  },
 
   "warp": {
     "proxy_host": "127.0.0.1",
@@ -16,7 +12,6 @@
     "listen_host": "127.0.0.1",
     "listen_port": 12345,
     "service_name": "ag-wrap-singbox",
-    "pm2_app_name": "sing-box-ag-wrap",
     "config_path": "/etc/ag-wrap/sing-box.json"
   },
 

@@ -42,12 +42,11 @@ class Shell:
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
         self._log.append(cmd)
-        return subprocess.run(
+        return self._execute(
             cmd,
             check=check,
-            capture_output=capture,
-            text=True,
-            input=input_text,
+            capture=capture,
+            input_text=input_text,
         )
 
     # -- read operations (always execute) -------------------------------------
@@ -59,9 +58,39 @@ class Shell:
         check: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         """Execute a read-only command. Runs even in dry-run mode."""
-        return subprocess.run(cmd, check=check, capture_output=True, text=True)
+        return self._execute(cmd, check=check, capture=True)
 
     # -- helpers --------------------------------------------------------------
+
+    def _execute(
+        self,
+        cmd: list[str],
+        *,
+        check: bool,
+        capture: bool,
+        input_text: str | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run a subprocess and surface stderr when ``check=True`` fails."""
+        try:
+            return subprocess.run(
+                cmd,
+                check=check,
+                capture_output=capture,
+                text=True,
+                input=input_text,
+            )
+        except subprocess.CalledProcessError as exc:
+            self._print_failure(exc)
+            raise
+
+    def _print_failure(self, exc: subprocess.CalledProcessError) -> None:
+        """Print a concise command failure summary before re-raising."""
+        console.print(
+            f"[red]✗ Command failed ({exc.returncode}): {' '.join(map(str, exc.cmd))}[/red]"
+        )
+        stderr = (exc.stderr or "").strip()
+        if stderr:
+            console.print(f"[red]{stderr}[/red]")
 
     def has_command(self, name: str) -> bool:
         """Return ``True`` if *name* is available on ``$PATH``."""

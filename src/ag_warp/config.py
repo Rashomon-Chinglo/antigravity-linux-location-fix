@@ -3,28 +3,41 @@
 from __future__ import annotations
 
 import json
+import os
+import pwd
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, IPvAnyNetwork, model_validator
 
 from ag_warp.branding import (
     DEFAULT_CONFIG_PATH,
     DEFAULT_GROUP_NAME,
     DEFAULT_NFT_TABLE_NAME,
-    DEFAULT_PM2_APP_NAME,
     DEFAULT_SERVICE_NAME,
     DEFAULT_STATE_FILE,
 )
 
-type SupervisorBackend = Literal["systemd", "pm2"]
 type Port = Annotated[int, Field(ge=1, le=65535)]
 
 
-class SupervisorConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+def _default_antigravity_base_dir() -> Path:
+    """Resolve the most likely Antigravity installation path for this session."""
+    sudo_home = _sudo_user_home()
+    if sudo_home is not None:
+        return sudo_home / ".antigravity-server" / "bin"
+    return Path.home() / ".antigravity-server" / "bin"
 
-    backend: SupervisorBackend = "systemd"
+
+def _sudo_user_home() -> Path | None:
+    """Return the invoking sudo user's home directory, if available."""
+    sudo_user = os.environ.get("SUDO_USER")
+    if not sudo_user or sudo_user == "root":
+        return None
+    try:
+        return Path(pwd.getpwnam(sudo_user).pw_dir)
+    except KeyError:
+        return None
 
 
 class WarpConfig(BaseModel):
@@ -40,7 +53,6 @@ class SingboxConfig(BaseModel):
     listen_host: str = "127.0.0.1"
     listen_port: Port = 12345
     service_name: str = DEFAULT_SERVICE_NAME
-    pm2_app_name: str = DEFAULT_PM2_APP_NAME
     config_path: Path = DEFAULT_CONFIG_PATH
 
 
@@ -53,7 +65,7 @@ class NftablesConfig(BaseModel):
     block_udp_ports: list[Port] = Field(default_factory=lambda: [443])
     block_public_ipv6: bool = True
     auto_detect_docker_bridges: bool = True
-    extra_bypass_cidrs: list[str] = Field(default_factory=list)
+    extra_bypass_cidrs: list[IPvAnyNetwork] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_redirect_ports(self) -> NftablesConfig:
@@ -69,11 +81,10 @@ class AppConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     group_name: str = DEFAULT_GROUP_NAME
-    antigravity_base_dir: Path = Path("/root/.antigravity-server/bin")
+    antigravity_base_dir: Path = Field(default_factory=_default_antigravity_base_dir)
     state_file: Path = DEFAULT_STATE_FILE
     pin_version: str | None = None
 
-    supervisor: SupervisorConfig = Field(default_factory=SupervisorConfig)
     warp: WarpConfig = Field(default_factory=WarpConfig)
     singbox: SingboxConfig = Field(default_factory=SingboxConfig)
     nftables: NftablesConfig = Field(default_factory=NftablesConfig)

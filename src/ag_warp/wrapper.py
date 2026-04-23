@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import stat
 
 from ag_warp.branding import APP_NAME
@@ -22,6 +23,8 @@ GID="$(getent group "$GROUP_NAME" | cut -d: -f3)"
 
 exec setpriv --regid "$GID" --clear-groups "$REAL" "$@"
 """
+
+_GROUP_NAME_RE = re.compile(r'^GROUP_NAME="([^"\n]+)"$', re.MULTILINE)
 
 
 def inject_wrapper(
@@ -44,11 +47,9 @@ def inject_wrapper(
     shell.run(["mv", str(server), str(real)])
 
     # 3. Write wrapper.
-    wrapper_content = _WRAPPER_TEMPLATE.format(app_name=APP_NAME, group_name=group_name)
     console.print(f"  Writing wrapper {server.name} …")
     if not shell.dry_run:
-        server.write_text(wrapper_content)
-        server.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+        _write_wrapper(server, group_name)
 
     # 4. Ensure .real is executable.
     if not shell.dry_run and real.exists():
@@ -56,6 +57,42 @@ def inject_wrapper(
         real.chmod(current | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
     wrapper_sha = sha256_file(server) if not shell.dry_run else "dry-run"
+
+    return {
+        "version": version.version,
+        "binary": str(server),
+        "real_binary": str(real),
+        "original_sha256": original_sha,
+        "wrapper_sha256": wrapper_sha,
+    }
+
+
+def read_wrapper_group_name(version: AntigravityVersion) -> str | None:
+    """Return the wrapper's embedded ``GROUP_NAME``, if present."""
+    try:
+        content = version.server_binary.read_text(errors="replace")
+    except OSError:
+        return None
+
+    match = _GROUP_NAME_RE.search(content)
+    return match.group(1) if match else None
+
+
+def update_wrapper_group(
+    version: AntigravityVersion,
+    group_name: str,
+    shell: Shell,
+) -> dict[str, str]:
+    """Rewrite an existing wrapper in place for a new Linux group."""
+    server = version.server_binary
+    real = version.real_binary
+
+    console.print(f"  Updating wrapper group in {server.name} …")
+    if not shell.dry_run:
+        _write_wrapper(server, group_name)
+
+    wrapper_sha = sha256_file(server) if not shell.dry_run else "dry-run"
+    original_sha = sha256_file(real) if real.exists() else ""
 
     return {
         "version": version.version,
@@ -121,3 +158,12 @@ def safe_restore(
         server.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
 
     return True
+
+
+def _write_wrapper(server: os.PathLike[str] | str, group_name: str) -> None:
+    """Write the managed wrapper content and executable mode."""
+    server_path = os.fspath(server)
+    content = _WRAPPER_TEMPLATE.format(app_name=APP_NAME, group_name=group_name)
+    with open(server_path, "w") as f:
+        f.write(content)
+    os.chmod(server_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)

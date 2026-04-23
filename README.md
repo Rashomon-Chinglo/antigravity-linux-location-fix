@@ -10,6 +10,7 @@
 It works by routing only the Antigravity remote server process tree through Cloudflare WARP with Linux GID-based `nftables` rules. Everything else on the host stays on the normal network path.
 
 The end-user CLI and release binary are named `ag-wrap`. The Python module name stays `ag_warp`.
+`ag-wrap` is this tool's name; Cloudflare WARP remains `warp` / `warp-cli` in code and status output.
 
 ## Problem
 
@@ -17,7 +18,7 @@ Typical symptoms:
 
 - Antigravity Remote SSH connects, but model/API calls fail with `FAILED_PRECONDITION`
 - Logs contain `User location is not supported for the API use.`
-- Full-host WARP fixes the API issue but breaks unrelated services like `cloudflared`, SSH, Docker, or normal server networking
+- Full-host WARP fixes the API issue but breaks unrelated services like SSH, Docker, or normal server networking
 
 This project is for the case where you need a targeted Antigravity location fix on Linux without forcing the whole machine through WARP.
 
@@ -25,13 +26,13 @@ This project is for the case where you need a targeted Antigravity location fix 
 
 ```text
 antigravity-server (wrapper)
-  → setpriv --regid <GID> (antigravity-warp group)
+  → setpriv --regid <GID> (antigravity-wrap group)
     → antigravity-server.real
       → extension host / language_server
         → Google API requests
 
 Kernel nftables:
-  if process GID == antigravity-warp
+  if process GID == antigravity-wrap
   and destination is public IPv4 TCP 80/443
   → redirect to sing-box (:12345)
     → WARP proxy (:40000)
@@ -41,7 +42,7 @@ Kernel nftables:
 Why this is useful:
 
 - Only Antigravity traffic is intercepted
-- `cloudflared`, SSH, Docker, and other host services stay direct
+- SSH, Docker, and other host services stay direct
 - The workflow is idempotent and designed for rollback
 - The project supports `dry-run`, `status`, `doctor`, and `verify`
 
@@ -125,8 +126,16 @@ Common flags:
 
 ```bash
 --config PATH
+--antigravity-bin-dir PATH
 --dry-run
 --yes / -y
+```
+
+For hosts with a non-standard Antigravity install path, you can override auto-detection:
+
+```bash
+ag-wrap status --ag-bin-dir /home/ubuntu/.antigravity-server/bin
+ag-wrap on --antigravity-bin-dir /home/ubuntu/.antigravity-server/bin
 ```
 
 ## Configuration
@@ -135,9 +144,6 @@ Create `config.json` and override only what you need:
 
 ```json
 {
-  "supervisor": {
-    "backend": "pm2"
-  },
   "warp": {
     "proxy_port": 50000
   }
@@ -160,7 +166,6 @@ to inspect the final merged config.
 - Wrapper injection requires confirmation by default
 - `off` preserves wrapper state but disables interception
 - `rollback` safely restores the original binary when checks pass
-- `cloudflared` is never modified
 - WARP is used in proxy mode, not as full-host mode
 
 ## Binary Build
@@ -219,7 +224,7 @@ ag-wrap --help
 
 ## Notes for Contributors
 
-Compared with the original MVP release (`v0.0.0`), the current project no longer ships repo-local shell scripts or static PM2/systemd templates. The Python CLI is the source of truth for generated config, supervisor definitions, `nftables` rules, and wrapper handling.
+Compared with the original MVP release (`v0.0.0`), the current project no longer ships repo-local shell scripts or static templates. The Python CLI is the source of truth for generated config, systemd unit content, `nftables` rules, and wrapper handling.
 
 ## License
 

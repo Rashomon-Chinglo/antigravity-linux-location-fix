@@ -24,7 +24,7 @@ The project routes only the Antigravity process tree through Cloudflare WARP by 
 - `src/ag_warp/cli.py`: Typer CLI entrypoints
 - `src/ag_warp/engine.py`: high-level workflows
 - `src/ag_warp/config.py`: config model and merge logic
-- `src/ag_warp/supervisor.py`: systemd and PM2 handling
+- `src/ag_warp/supervisor.py`: systemd handling
 - `src/ag_warp/nftables.py`: rule generation and application
 - `src/ag_warp/warp.py`: `warp-cli` integration
 - `src/ag_warp/wrapper.py`: Antigravity wrapper injection and restore

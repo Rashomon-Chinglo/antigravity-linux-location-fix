@@ -1,5 +1,7 @@
 """Tests for ag_warp.nftables rule generation."""
 
+from ipaddress import ip_network
+
 from ag_warp.config import NftablesConfig
 from ag_warp.nftables import generate_rules
 
@@ -42,7 +44,7 @@ def test_docker_cidrs() -> None:
 
 
 def test_extra_bypass() -> None:
-    cfg = NftablesConfig(extra_bypass_cidrs=["203.0.113.0/24"])
+    cfg = NftablesConfig(extra_bypass_cidrs=[ip_network("203.0.113.0/24")])
     rules = generate_rules(cfg, gid=987, redirect_port=12345)
 
     assert "203.0.113.0/24" in rules

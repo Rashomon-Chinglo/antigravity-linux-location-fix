@@ -22,7 +22,7 @@ from ag_warp.branding import command_label
 from ag_warp.config import AppConfig
 from ag_warp.discovery import discover_latest, discover_versions
 from ag_warp.shell import Shell
-from ag_warp.state import append_change, get_latest_change, load_state, save_state
+from ag_warp.state import StateFile, append_change, get_latest_change, load_state, save_state
 from ag_warp.system import (
     check_port_availability,
     doctor_check,
@@ -64,12 +64,11 @@ def run_status(cfg: AppConfig, shell: Shell) -> None:
 
     # WARP.
     ws = warp_mod.get_status(shell)
-    _status_line("WARP proxy", ws.connected, f"mode={ws.mode} port={ws.proxy_port}")
+    _status_line("warp", ws.connected, f"mode={ws.mode} port={ws.proxy_port}")
 
     # sing-box.
     sb_running = sv_mod.is_running(cfg, shell)
-    sb_label = sv_mod.active_label(cfg, shell) or _service_label(cfg)
-    _status_line(f"sing-box ({cfg.supervisor.backend})", sb_running, sb_label)
+    _status_line("sing-box", sb_running, f"port={cfg.singbox.listen_port}")
 
     # nftables.
     nft_ok = nft_mod.table_exists(cfg.nftables, shell)
@@ -82,9 +81,6 @@ def run_status(cfg: AppConfig, shell: Shell) -> None:
 
     # Antigravity versions.
     _print_versions(cfg, nft_ok)
-
-    # cloudflared.
-    _print_cloudflared(shell)
 
 
 def _status_line(label: str, ok: bool, detail: str) -> None:
@@ -129,19 +125,6 @@ def _print_versions(cfg: AppConfig, nft_ok: bool) -> None:
             f"    Run [bold]{command_label('on')}[/bold] to re-enable, "
             f"or [bold]{command_label('rollback')}[/bold] to fully remove."
         )
-
-
-def _print_cloudflared(shell: Shell) -> None:
-    console.print()
-    cf_running = shell.run_read(["pgrep", "-x", "cloudflared"]).returncode == 0
-    cf_installed = shell.has_command("cloudflared")
-    if cf_running:
-        detail = "running"
-    elif not cf_installed:
-        detail = "not installed"
-    else:
-        detail = "not running"
-    _status_line("cloudflared", cf_running or not cf_installed, detail)
 
 
 # -- on (apply) ---------------------------------------------------------------
@@ -199,7 +182,7 @@ def run_on(cfg: AppConfig, shell: Shell, opts: OnOptions) -> None:
     # 6. sing-box service.
     sv_changed = sv_mod.ensure_running(cfg, shell, config_changed=sb_changed)
     _ok(
-        f"sing-box service ({cfg.supervisor.backend})"
+        "sing-box service"
         f"{' — started/restarted' if sv_changed else ' — already running'}"
     )
 
@@ -240,7 +223,7 @@ def run_on(cfg: AppConfig, shell: Shell, opts: OnOptions) -> None:
 def _handle_wrapper(
     cfg: AppConfig,
     shell: Shell,
-    state: object,  # StateFile — avoid circular import at module level
+    state: StateFile,
     opts: OnOptions,
 ) -> None:
     """Discover version and inject wrapper if needed."""
@@ -263,11 +246,17 @@ def _handle_wrapper(
                     raise SystemExit(4)
 
             meta = wrapper_mod.inject_wrapper(latest, cfg.group_name, shell)
-            append_change(state, "wrapper", "wrapped", rollback_safe=True, **meta)  # type: ignore[arg-type]
+            append_change(state, "wrapper", "wrapped", rollback_safe=True, **meta)
             _ok(f"Wrapper injected: {latest.version[:40]}")
 
         case "wrapped":
-            _ok(f"Wrapper already active: {latest.version[:40]}")
+            current_group = wrapper_mod.read_wrapper_group_name(latest)
+            if current_group != cfg.group_name:
+                meta = wrapper_mod.update_wrapper_group(latest, cfg.group_name, shell)
+                append_change(state, "wrapper", "updated", rollback_safe=True, **meta)
+                _ok(f"Wrapper group updated: {latest.version[:40]}")
+            else:
+                _ok(f"Wrapper already active: {latest.version[:40]}")
 
         case _:
             _warn(f"Wrapper status is '{latest.wrapper_status}'. Manual inspection required.")
@@ -354,10 +343,3 @@ def run_rollback(cfg: AppConfig, shell: Shell, opts: RollbackOptions) -> None:
 
     _print_restart_notice(shell)
     console.print("\n[green]Rollback complete.[/green]")
-
-
-def _service_label(cfg: AppConfig) -> str:
-    """Return the active sing-box service label for the configured backend."""
-    if cfg.supervisor.backend == "systemd":
-        return cfg.singbox.service_name
-    return cfg.singbox.pm2_app_name

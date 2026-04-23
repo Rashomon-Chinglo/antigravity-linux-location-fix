@@ -11,7 +11,7 @@ from ag_warp.verify import _check_process_group
 def test_process_group_check_requires_exact_group_match() -> None:
     shell = Shell()
     output = """\
-other-group /usr/bin/language_server --label antigravity-warp
+other-group /usr/bin/language_server --label antigravity-wrap
 other-group /usr/bin/extensionHost
 """
 
@@ -30,8 +30,8 @@ other-group /usr/bin/extensionHost
 def test_process_group_check_passes_for_target_group() -> None:
     shell = Shell()
     output = """\
-antigravity-warp /usr/bin/antigravity-server
-antigravity-warp /usr/bin/language_server --stdio
+antigravity-wrap /usr/bin/antigravity-server
+antigravity-wrap /usr/bin/language_server --stdio
 """
 
     with patch.object(shell, "run_read") as mock_run_read:

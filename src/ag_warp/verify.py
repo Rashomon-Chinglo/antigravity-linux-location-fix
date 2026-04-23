@@ -33,8 +33,6 @@ def run_verify(config: AppConfig, shell: Shell) -> list[CheckResult]:
     else:
         results.append(CheckResult("GID resolve", False, f"group {config.group_name} not found"))
 
-    results.append(_check_cloudflared(shell))
-
     return results
 
 
@@ -155,19 +153,6 @@ def _check_process_group(config: AppConfig, shell: Shell) -> CheckResult:
         "Antigravity process group",
         in_group,
         f"{config.group_name}" if in_group else "some processes NOT in group",
-    )
-
-
-def _check_cloudflared(shell: Shell) -> CheckResult:
-    if not shell.has_command("cloudflared"):
-        return CheckResult("cloudflared", True, "not installed (OK)")
-
-    r = shell.run_read(["pgrep", "-x", "cloudflared"])
-    running = r.returncode == 0
-    return CheckResult(
-        "cloudflared",
-        running,
-        "running" if running else "not running",
     )
 
 
