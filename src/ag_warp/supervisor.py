@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from ag_warp.config import AppConfig
-from ag_warp.shell import Shell, console
+from ag_warp.shell import Shell
+from ag_warp.ui import console
 
 # -- systemd service template -------------------------------------------------
 
@@ -17,7 +18,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/sing-box run -c {config_path}
+ExecStart={singbox_binary} run -c {config_path}
 Restart=on-failure
 RestartSec=3
 
@@ -73,9 +74,10 @@ def is_running(config: AppConfig, shell: Shell) -> bool:
 def _ensure_systemd(config: AppConfig, shell: Shell, config_changed: bool) -> bool:
     svc = config.singbox.service_name
     unit_path = _SYSTEMD_UNIT_DIR / f"{svc}.service"
+    singbox_binary = _resolve_singbox_binary(shell)
 
     # Generate / update unit file.
-    new_unit = _SYSTEMD_TEMPLATE.format(config_path=config.singbox.config_path)
+    new_unit = _render_systemd_unit(config.singbox.config_path, singbox_binary)
     unit_changed = False
 
     if unit_path.exists():
@@ -120,6 +122,7 @@ def _stop_systemd(config: AppConfig, shell: Shell) -> None:
 
 def _ensure_pm2(config: AppConfig, shell: Shell, config_changed: bool) -> bool:
     app_name = config.singbox.pm2_app_name
+    singbox_binary = _resolve_singbox_binary(shell)
 
     r = shell.run_read(["pm2", "pid", app_name])
     pid = r.stdout.strip()
@@ -138,7 +141,7 @@ def _ensure_pm2(config: AppConfig, shell: Shell, config_changed: bool) -> bool:
         [
             "pm2",
             "start",
-            "/usr/local/bin/sing-box",
+            singbox_binary,
             "--name",
             app_name,
             "--",
@@ -156,3 +159,16 @@ def _stop_pm2(config: AppConfig, shell: Shell) -> None:
     console.print(f"  Deleting PM2 app {app_name} …")
     shell.run(["pm2", "delete", app_name], check=False)
     shell.run(["pm2", "save"], check=False)
+
+
+def _resolve_singbox_binary(shell: Shell) -> str:
+    """Resolve the sing-box binary path once for service templates and PM2."""
+    return shell.resolve_command("sing-box") or "sing-box"
+
+
+def _render_systemd_unit(config_path: Path, singbox_binary: str) -> str:
+    """Render the systemd unit content for sing-box."""
+    return _SYSTEMD_TEMPLATE.format(
+        config_path=config_path,
+        singbox_binary=singbox_binary,
+    )

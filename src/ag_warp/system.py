@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from ag_warp.config import AppConfig
-from ag_warp.shell import Shell, console
+from ag_warp.shell import Shell
+from ag_warp.ui import console
 
 # -- group management ---------------------------------------------------------
 
@@ -54,11 +55,7 @@ _OPTIONAL = ["docker", "cloudflared"]
 
 def doctor_check(cfg: AppConfig, shell: Shell, *, verbose: bool = False) -> bool:
     """Return ``True`` if all required system commands are present."""
-    required = list(_BASE_REQUIRED)
-    if cfg.supervisor.backend == "systemd":
-        required.append("systemctl")
-    else:
-        required.append("pm2")
+    required = _required_commands(cfg)
 
     all_ok = True
     for cmd in required:
@@ -78,6 +75,13 @@ def doctor_check(cfg: AppConfig, shell: Shell, *, verbose: bool = False) -> bool
             console.print(f"  {icon} {cmd}{suffix}")
 
     return all_ok
+
+
+def _required_commands(cfg: AppConfig) -> list[str]:
+    """Return the required command list for the configured supervisor backend."""
+    required = list(_BASE_REQUIRED)
+    required.append("systemctl" if cfg.supervisor.backend == "systemd" else "pm2")
+    return required
 
 
 # -- port probing -------------------------------------------------------------

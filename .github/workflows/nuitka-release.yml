@@ -1,0 +1,99 @@
+name: Build Nuitka Binary
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Out Repository
+        uses: actions/checkout@v4
+
+      - name: Set Up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: "x64"
+          cache: "pip"
+
+      - name: Install Test Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . pytest ruff
+
+      - name: Run Tests
+        run: pytest -q
+
+      - name: Run Lint
+        run: ruff check .
+
+  build-linux:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Out Repository
+        uses: actions/checkout@v4
+
+      - name: Set Up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: "x64"
+          cache: "pip"
+
+      - name: Install Linux Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc patchelf
+
+      - name: Install Project Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Build Linux Binary
+        uses: Nuitka/Nuitka-Action@v1.4
+        with:
+          nuitka-version: 4.0.5
+          script-name: src/ag_warp/__main__.py
+          mode: onefile
+
+      - name: Prepare Artifact
+        id: prepare
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME}"
+          else
+            version="manual-${GITHUB_SHA::7}"
+          fi
+          asset_name="ag-warp-${version}-linux-x86_64"
+          cp build/ag-warp "dist/${asset_name}"
+          chmod +x "dist/${asset_name}"
+          echo "asset_name=${asset_name}" >> "$GITHUB_OUTPUT"
+          echo "asset_path=dist/${asset_name}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.prepare.outputs.asset_name }}
+          path: ${{ steps.prepare.outputs.asset_path }}
+
+      - name: Publish Release Asset
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" "${{ steps.prepare.outputs.asset_path }}" --clobber

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 type SupervisorBackend = Literal["systemd", "pm2"]
+type Port = Annotated[int, Field(ge=1, le=65535)]
 
 
 class SupervisorConfig(BaseModel):
@@ -21,14 +22,14 @@ class WarpConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     proxy_host: str = "127.0.0.1"
-    proxy_port: int = 40000
+    proxy_port: Port = 40000
 
 
 class SingboxConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     listen_host: str = "127.0.0.1"
-    listen_port: int = 12345
+    listen_port: Port = 12345
     service_name: str = "ag-warp-singbox"
     pm2_app_name: str = "sing-box-ag-warp"
     config_path: Path = Path("/etc/ag-warp/sing-box.json")
@@ -39,11 +40,18 @@ class NftablesConfig(BaseModel):
 
     table_family: str = "inet"
     table_name: str = "ag_warp"
-    redirect_tcp_ports: list[int] = [80, 443]
-    block_udp_ports: list[int] = [443]
+    redirect_tcp_ports: list[Port] = Field(default_factory=lambda: [80, 443])
+    block_udp_ports: list[Port] = Field(default_factory=lambda: [443])
     block_public_ipv6: bool = True
     auto_detect_docker_bridges: bool = True
-    extra_bypass_cidrs: list[str] = []
+    extra_bypass_cidrs: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_redirect_ports(self) -> NftablesConfig:
+        """Ensure nft redirect rules always have at least one TCP port."""
+        if not self.redirect_tcp_ports:
+            raise ValueError("nftables.redirect_tcp_ports must not be empty.")
+        return self
 
 
 class AppConfig(BaseModel):
@@ -56,10 +64,10 @@ class AppConfig(BaseModel):
     state_file: Path = Path("/var/lib/ag-warp/state.json")
     pin_version: str | None = None
 
-    supervisor: SupervisorConfig = SupervisorConfig()
-    warp: WarpConfig = WarpConfig()
-    singbox: SingboxConfig = SingboxConfig()
-    nftables: NftablesConfig = NftablesConfig()
+    supervisor: SupervisorConfig = Field(default_factory=SupervisorConfig)
+    warp: WarpConfig = Field(default_factory=WarpConfig)
+    singbox: SingboxConfig = Field(default_factory=SingboxConfig)
+    nftables: NftablesConfig = Field(default_factory=NftablesConfig)
 
     @model_validator(mode="after")
     def _validate_ports(self) -> AppConfig:
@@ -108,7 +116,9 @@ def load_config(
     data = dict(defaults)
 
     # Layer 2: config file.
-    if config_path and config_path.exists():
+    if config_path is not None:
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found: {config_path}")
         with config_path.open() as f:
             user_data = json.load(f)
         data = _deep_merge(data, user_data)

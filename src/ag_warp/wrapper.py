@@ -6,7 +6,8 @@ import os
 import stat
 
 from ag_warp.discovery import AntigravityVersion, sha256_file
-from ag_warp.shell import Shell, console
+from ag_warp.shell import Shell
+from ag_warp.ui import console
 
 # The wrapper script uses relative paths so it survives version directory renames.
 _WRAPPER_TEMPLATE = """\

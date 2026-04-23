@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ag_warp.config import AppConfig
-from ag_warp.shell import Shell, console
+from ag_warp.shell import Shell
+from ag_warp.system import resolve_gid
+from ag_warp.ui import console
 
 
 @dataclass
@@ -17,7 +19,7 @@ class CheckResult:
 
 def run_verify(config: AppConfig, shell: Shell) -> list[CheckResult]:
     """Execute all verification checks. Returns a list of results."""
-    gid = _resolve_gid(config.group_name, shell)
+    gid = resolve_gid(config.group_name, shell)
     results: list[CheckResult] = []
 
     results.append(_check_warp_proxy(config, shell))
@@ -49,14 +51,6 @@ def print_results(results: list[CheckResult]) -> bool:
 
 
 # -- individual checks --------------------------------------------------------
-
-
-def _resolve_gid(group_name: str, shell: Shell) -> int | None:
-    r = shell.run_read(["getent", "group", group_name])
-    if r.returncode != 0:
-        return None
-    parts = r.stdout.strip().split(":")
-    return int(parts[2]) if len(parts) >= 3 else None
 
 
 def _check_warp_proxy(config: AppConfig, shell: Shell) -> CheckResult:
@@ -139,14 +133,14 @@ def _check_direct_routing(shell: Shell) -> CheckResult:
 
 
 def _check_process_group(config: AppConfig, shell: Shell) -> CheckResult:
-    r = shell.run_read(["ps", "-eo", "pid,group,args"])
+    r = shell.run_read(["ps", "-ww", "-eo", "group:64=,args="])
     if r.returncode != 0:
         return CheckResult("Antigravity process group", False, "ps failed")
 
     ag_procs = [
         line
         for line in r.stdout.splitlines()
-        if "language_server" in line or "extensionHost" in line
+        if "antigravity-server" in line or "language_server" in line or "extensionHost" in line
     ]
 
     if not ag_procs:
@@ -156,7 +150,7 @@ def _check_process_group(config: AppConfig, shell: Shell) -> CheckResult:
             "no running Antigravity processes found",
         )
 
-    in_group = all(config.group_name in line for line in ag_procs)
+    in_group = all(_extract_group_name(line) == config.group_name for line in ag_procs)
     return CheckResult(
         "Antigravity process group",
         in_group,
@@ -175,3 +169,8 @@ def _check_cloudflared(shell: Shell) -> CheckResult:
         running,
         "running" if running else "not running",
     )
+
+
+def _extract_group_name(ps_line: str) -> str:
+    """Extract the group column from a ``ps`` output line."""
+    return ps_line.split(maxsplit=1)[0] if ps_line.split(maxsplit=1) else ""

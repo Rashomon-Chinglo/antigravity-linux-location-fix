@@ -42,12 +42,15 @@ def _try_docker_network_inspect(shell: Shell) -> list[str]:
     try:
         networks = json.loads(r.stdout)
         for net in networks:
-            ipam = net.get("IPAM", {})
-            for cfg in ipam.get("Config", []):
+            ipam = net.get("IPAM") or {}
+            configs = ipam.get("Config") or []
+            for cfg in configs:
+                if not isinstance(cfg, dict):
+                    continue
                 subnet = cfg.get("Subnet", "")
                 if subnet and ":" not in subnet:  # IPv4 only
                     cidrs.append(subnet)
-    except (json.JSONDecodeError, KeyError):
+    except (AttributeError, json.JSONDecodeError, KeyError):
         return []
 
     return sorted(set(cidrs))

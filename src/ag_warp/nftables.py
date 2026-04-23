@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from ag_warp.config import NftablesConfig
-from ag_warp.shell import Shell, console
+from ag_warp.shell import Shell
+from ag_warp.ui import console
 
 # RFC1918 + loopback + CGN + link-local — always bypassed.
 _BUILTIN_BYPASS: list[str] = [
@@ -23,53 +24,10 @@ def generate_rules(
     docker_cidrs: list[str] | None = None,
 ) -> str:
     """Render the nftables ruleset as a string."""
-    # Merge bypass CIDRs: builtins + docker + user-specified.
-    all_bypass = list(_BUILTIN_BYPASS)
-    if docker_cidrs:
-        all_bypass.extend(docker_cidrs)
-    all_bypass.extend(config.extra_bypass_cidrs)
-    # Deduplicate while preserving order.
-    seen: set[str] = set()
-    bypass_cidrs: list[str] = []
-    for cidr in all_bypass:
-        if cidr not in seen:
-            seen.add(cidr)
-            bypass_cidrs.append(cidr)
-
-    # Build bypass lines.
-    bypass_lines = "\n".join(
-        f"    meta skgid {gid} ip daddr {cidr} return" for cidr in bypass_cidrs
-    )
-
-    # TCP redirect ports.
+    bypass_cidrs = _build_bypass_cidrs(config, docker_cidrs)
+    bypass_lines = _render_bypass_rules(gid, bypass_cidrs)
+    filter_body = _render_filter_body(config, gid)
     tcp_ports = ", ".join(str(p) for p in config.redirect_tcp_ports)
-
-    # UDP block section.
-    udp_block = ""
-    if config.block_udp_ports:
-        udp_ports = ", ".join(str(p) for p in config.block_udp_ports)
-        udp_block = f"    meta skgid {gid} udp dport {{ {udp_ports} }} drop"
-
-    # IPv6 block section.
-    ipv6_block = ""
-    if config.block_public_ipv6:
-        ipv6_block = "\n".join(
-            [
-                f"    meta skgid {gid} ip6 daddr ::1 accept",
-                f"    meta skgid {gid} ip6 daddr fe80::/10 accept",
-                f"    meta skgid {gid} ip6 daddr fc00::/7 accept",
-                f"    meta skgid {gid} ip6 nexthdr tcp reject with tcp reset",
-                f"    meta skgid {gid} ip6 nexthdr udp reject with icmpv6 port-unreachable",
-            ]
-        )
-
-    # Assemble filter chain body.
-    filter_body_parts: list[str] = []
-    if ipv6_block:
-        filter_body_parts.append(ipv6_block)
-    if udp_block:
-        filter_body_parts.append(udp_block)
-    filter_body = "\n".join(filter_body_parts)
 
     ruleset = f"""\
 table {config.table_family} {config.table_name} {{
@@ -89,6 +47,67 @@ table {config.table_family} {config.table_name} {{
 }}
 """
     return ruleset
+
+
+def _build_bypass_cidrs(
+    config: NftablesConfig,
+    docker_cidrs: list[str] | None,
+) -> list[str]:
+    """Merge builtin, Docker, and user-defined bypass CIDRs."""
+    all_bypass = list(_BUILTIN_BYPASS)
+    if docker_cidrs:
+        all_bypass.extend(docker_cidrs)
+    all_bypass.extend(config.extra_bypass_cidrs)
+    return _deduplicate(all_bypass)
+
+
+def _render_bypass_rules(gid: int, cidrs: list[str]) -> str:
+    """Render the nftables bypass rules for the given CIDRs."""
+    return "\n".join(f"    meta skgid {gid} ip daddr {cidr} return" for cidr in cidrs)
+
+
+def _render_filter_body(config: NftablesConfig, gid: int) -> str:
+    """Render the filter-chain body sections."""
+    sections = [
+        _render_ipv6_block(config, gid),
+        _render_udp_block(config, gid),
+    ]
+    return "\n".join(section for section in sections if section)
+
+
+def _render_udp_block(config: NftablesConfig, gid: int) -> str:
+    """Render UDP blocking rules when configured."""
+    if not config.block_udp_ports:
+        return ""
+    udp_ports = ", ".join(str(p) for p in config.block_udp_ports)
+    return f"    meta skgid {gid} udp dport {{ {udp_ports} }} drop"
+
+
+def _render_ipv6_block(config: NftablesConfig, gid: int) -> str:
+    """Render IPv6 filtering rules when enabled."""
+    if not config.block_public_ipv6:
+        return ""
+    return "\n".join(
+        [
+            f"    meta skgid {gid} ip6 daddr ::1 accept",
+            f"    meta skgid {gid} ip6 daddr fe80::/10 accept",
+            f"    meta skgid {gid} ip6 daddr fc00::/7 accept",
+            f"    meta skgid {gid} ip6 nexthdr tcp reject with tcp reset",
+            f"    meta skgid {gid} ip6 nexthdr udp reject with icmpv6 port-unreachable",
+        ]
+    )
+
+
+def _deduplicate(items: list[str]) -> list[str]:
+    """Deduplicate a list while preserving its original order."""
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        deduped.append(item)
+    return deduped
 
 
 def apply_rules(

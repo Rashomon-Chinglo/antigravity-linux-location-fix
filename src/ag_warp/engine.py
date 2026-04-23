@@ -10,7 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import typer
-from rich.console import Console
 from rich.table import Table
 
 from ag_warp import docker as docker_mod
@@ -29,9 +28,7 @@ from ag_warp.system import (
     ensure_group,
     is_antigravity_running,
 )
-
-console = Console(stderr=True)
-
+from ag_warp.ui import console, render_command_header
 
 # -- shared output helpers ----------------------------------------------------
 
@@ -62,7 +59,7 @@ def _print_restart_notice(shell: Shell) -> None:
 
 def run_status(cfg: AppConfig, shell: Shell) -> None:
     """Read-only status check of all components."""
-    console.print("[bold]ag-warp status[/bold]\n")
+    console.print(f"{render_command_header('ag-warp status')}\n")
 
     # WARP.
     ws = warp_mod.get_status(shell)
@@ -70,11 +67,7 @@ def run_status(cfg: AppConfig, shell: Shell) -> None:
 
     # sing-box.
     sb_running = sv_mod.is_running(cfg, shell)
-    sb_label = (
-        cfg.singbox.service_name
-        if cfg.supervisor.backend == "systemd"
-        else cfg.singbox.pm2_app_name
-    )
+    sb_label = _service_label(cfg)
     _status_line(f"sing-box ({cfg.supervisor.backend})", sb_running, sb_label)
 
     # nftables.
@@ -163,10 +156,7 @@ class OnOptions:
 
 def run_on(cfg: AppConfig, shell: Shell, opts: OnOptions) -> None:
     """Start and converge all components to desired state."""
-    label = "[bold]ag-warp on[/bold]"
-    if opts.dry_run:
-        label += " [dim](dry-run)[/dim]"
-    console.print(f"{label}\n")
+    console.print(f"{render_command_header('ag-warp on', dry_run=opts.dry_run)}\n")
 
     # 1. Doctor.
     if not doctor_check(cfg, shell):
@@ -294,10 +284,7 @@ class OffOptions:
 
 def run_off(cfg: AppConfig, shell: Shell, opts: OffOptions) -> None:
     """Stop runtime interception (keep wrapper, keep state)."""
-    label = "[bold]ag-warp off[/bold]"
-    if opts.dry_run:
-        label += " [dim](dry-run)[/dim]"
-    console.print(f"{label}\n")
+    console.print(f"{render_command_header('ag-warp off', dry_run=opts.dry_run)}\n")
 
     sv_mod.stop_service(cfg, shell)
     _ok("sing-box stopped")
@@ -327,10 +314,7 @@ class RollbackOptions:
 
 def run_rollback(cfg: AppConfig, shell: Shell, opts: RollbackOptions) -> None:
     """Full rollback: off + safe wrapper restore."""
-    label = "[bold]ag-warp rollback[/bold]"
-    if opts.dry_run:
-        label += " [dim](dry-run)[/dim]"
-    console.print(f"{label}\n")
+    console.print(f"{render_command_header('ag-warp rollback', dry_run=opts.dry_run)}\n")
 
     if not opts.yes:
         proceed = typer.confirm(
@@ -366,3 +350,10 @@ def run_rollback(cfg: AppConfig, shell: Shell, opts: RollbackOptions) -> None:
 
     _print_restart_notice(shell)
     console.print("\n[green]Rollback complete.[/green]")
+
+
+def _service_label(cfg: AppConfig) -> str:
+    """Return the active sing-box service label for the configured backend."""
+    if cfg.supervisor.backend == "systemd":
+        return cfg.singbox.service_name
+    return cfg.singbox.pm2_app_name

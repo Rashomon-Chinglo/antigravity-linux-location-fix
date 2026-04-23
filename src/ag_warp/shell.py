@@ -7,12 +7,11 @@ Provides two entry points:
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 
-from rich.console import Console
-
-console = Console(stderr=True)
+from ag_warp.ui import console
 
 
 @dataclass
@@ -66,5 +65,8 @@ class Shell:
 
     def has_command(self, name: str) -> bool:
         """Return ``True`` if *name* is available on ``$PATH``."""
-        r = self.run_read(["which", name])
-        return r.returncode == 0
+        return self.resolve_command(name) is not None
+
+    def resolve_command(self, name: str) -> str | None:
+        """Return the resolved executable path for *name*, if available."""
+        return shutil.which(name)

@@ -15,11 +15,11 @@ import json
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
 import typer
-from rich.console import Console
 
 from ag_warp import __version__
 from ag_warp.config import AppConfig, load_config
@@ -34,9 +34,8 @@ from ag_warp.engine import (
 )
 from ag_warp.shell import Shell
 from ag_warp.system import doctor_check
+from ag_warp.ui import console, render_command_header
 from ag_warp.verify import print_results, run_verify
-
-console = Console(stderr=True)
 
 app = typer.Typer(
     name="ag-warp",
@@ -88,6 +87,14 @@ EXIT_DEPENDENCY_MISSING = 3
 EXIT_USER_CANCELLED = 4
 
 
+@dataclass(frozen=True)
+class CommandRuntime:
+    """Fully built runtime objects shared by CLI command handlers."""
+
+    config: AppConfig
+    shell: Shell
+
+
 # -- lock ----------------------------------------------------------------------
 
 
@@ -117,17 +124,49 @@ def _load(
     singbox_port: int | None = None,
 ) -> AppConfig:
     """Build ``AppConfig`` from file + CLI overrides."""
+    try:
+        return load_config(
+            config_path,
+            cli_overrides=_build_cli_overrides(
+                warp_port=warp_port,
+                singbox_port=singbox_port,
+            ),
+        )
+    except Exception as exc:
+        console.print(f"[red]✗ Config error: {exc}[/red]")
+        raise SystemExit(EXIT_CONFIG_ERROR)
+
+
+def _build_cli_overrides(
+    *,
+    warp_port: int | None,
+    singbox_port: int | None,
+) -> dict[str, Any] | None:
+    """Translate CLI flags into dotted-path config overrides."""
     overrides: dict[str, Any] = {}
     if warp_port is not None:
         overrides["warp.proxy_port"] = warp_port
     if singbox_port is not None:
         overrides["singbox.listen_port"] = singbox_port
+    return overrides or None
 
-    try:
-        return load_config(config_path, cli_overrides=overrides or None)
-    except Exception as exc:
-        console.print(f"[red]✗ Config error: {exc}[/red]")
-        raise SystemExit(EXIT_CONFIG_ERROR)
+
+def _build_runtime(
+    *,
+    config_path: Path | None,
+    dry_run: bool,
+    warp_port: int | None = None,
+    singbox_port: int | None = None,
+) -> CommandRuntime:
+    """Build the shared runtime objects used by command handlers."""
+    return CommandRuntime(
+        config=_load(
+            config_path,
+            warp_port=warp_port,
+            singbox_port=singbox_port,
+        ),
+        shell=Shell(dry_run=dry_run),
+    )
 
 
 # -- commands ------------------------------------------------------------------
@@ -140,9 +179,13 @@ def status(
     singbox_port: SingboxPortOption = None,
 ) -> None:
     """Read-only status check of all components."""
-    cfg = _load(config, warp_port=warp_port, singbox_port=singbox_port)
-    shell = Shell(dry_run=False)
-    run_status(cfg, shell)
+    runtime = _build_runtime(
+        config_path=config,
+        dry_run=False,
+        warp_port=warp_port,
+        singbox_port=singbox_port,
+    )
+    run_status(runtime.config, runtime.shell)
 
 
 @app.command(name="on")
@@ -161,12 +204,16 @@ def on_cmd(
     singbox_port: SingboxPortOption = None,
 ) -> None:
     """Start and converge all components to desired state."""
-    cfg = _load(config, warp_port=warp_port, singbox_port=singbox_port)
-    shell = Shell(dry_run=dry_run)
+    runtime = _build_runtime(
+        config_path=config,
+        dry_run=dry_run,
+        warp_port=warp_port,
+        singbox_port=singbox_port,
+    )
     with _acquire_lock():
         run_on(
-            cfg,
-            shell,
+            runtime.config,
+            runtime.shell,
             OnOptions(
                 dry_run=dry_run,
                 yes=yes,
@@ -209,12 +256,11 @@ def off(
     ] = False,
 ) -> None:
     """Stop runtime interception (keep wrapper, keep state)."""
-    cfg = _load(config)
-    shell = Shell(dry_run=dry_run)
+    runtime = _build_runtime(config_path=config, dry_run=dry_run)
     with _acquire_lock():
         run_off(
-            cfg,
-            shell,
+            runtime.config,
+            runtime.shell,
             OffOptions(
                 dry_run=dry_run,
                 disconnect_warp=disconnect_warp,
@@ -229,12 +275,11 @@ def rollback(
     yes: YesOption = False,
 ) -> None:
     """Full rollback: off + safe wrapper restore."""
-    cfg = _load(config)
-    shell = Shell(dry_run=dry_run)
+    runtime = _build_runtime(config_path=config, dry_run=dry_run)
     with _acquire_lock():
         run_rollback(
-            cfg,
-            shell,
+            runtime.config,
+            runtime.shell,
             RollbackOptions(
                 dry_run=dry_run,
                 yes=yes,
@@ -249,11 +294,15 @@ def verify(
     singbox_port: SingboxPortOption = None,
 ) -> None:
     """End-to-end routing verification."""
-    cfg = _load(config, warp_port=warp_port, singbox_port=singbox_port)
-    shell = Shell(dry_run=False)
+    runtime = _build_runtime(
+        config_path=config,
+        dry_run=False,
+        warp_port=warp_port,
+        singbox_port=singbox_port,
+    )
 
-    console.print("[bold]ag-warp verify[/bold]\n")
-    results = run_verify(cfg, shell)
+    console.print(f"{render_command_header('ag-warp verify')}\n")
+    results = run_verify(runtime.config, runtime.shell)
     all_ok = print_results(results)
 
     console.print()
@@ -271,20 +320,24 @@ def dump_config(
     singbox_port: SingboxPortOption = None,
 ) -> None:
     """Print the final merged configuration."""
-    cfg = _load(config, warp_port=warp_port, singbox_port=singbox_port)
+    runtime = _build_runtime(
+        config_path=config,
+        dry_run=False,
+        warp_port=warp_port,
+        singbox_port=singbox_port,
+    )
     console.print(
-        json.dumps(cfg.model_dump(mode="json"), indent=2, default=str),
+        json.dumps(runtime.config.model_dump(mode="json"), indent=2, default=str),
     )
 
 
 @app.command()
 def doctor(config: ConfigOption = None) -> None:
     """Check system dependencies."""
-    cfg = _load(config)
-    shell = Shell(dry_run=False)
+    runtime = _build_runtime(config_path=config, dry_run=False)
 
-    console.print("[bold]ag-warp doctor[/bold]\n")
-    ok = doctor_check(cfg, shell, verbose=True)
+    console.print(f"{render_command_header('ag-warp doctor')}\n")
+    ok = doctor_check(runtime.config, runtime.shell, verbose=True)
 
     console.print()
     if ok:

@@ -18,10 +18,16 @@ def test_defaults() -> None:
     assert cfg.nftables.block_public_ipv6 is True
 
 
-def test_load_missing_file() -> None:
-    """Loading a non-existent file should return defaults."""
-    cfg = load_config(Path("/does/not/exist.json"))
+def test_load_defaults_without_file() -> None:
+    """Omitting a config file should return defaults."""
+    cfg = load_config()
     assert cfg == AppConfig()
+
+
+def test_missing_explicit_config_file_raises() -> None:
+    """Passing a missing config path should fail fast."""
+    with pytest.raises(FileNotFoundError, match="Config file not found"):
+        load_config(Path("/does/not/exist.json"))
 
 
 def test_load_partial_override(tmp_path: Path) -> None:
@@ -109,3 +115,15 @@ def test_cli_override_port_conflict() -> None:
                 "singbox.listen_port": 12345,
             },
         )
+
+
+def test_invalid_port_range_rejected() -> None:
+    """Ports must stay within the valid TCP/UDP range."""
+    with pytest.raises(Exception, match="less than or equal to 65535"):
+        AppConfig.model_validate({"warp": {"proxy_port": 70000}})
+
+
+def test_redirect_ports_must_not_be_empty() -> None:
+    """The redirect chain needs at least one TCP port to intercept."""
+    with pytest.raises(Exception, match="must not be empty"):
+        AppConfig.model_validate({"nftables": {"redirect_tcp_ports": []}})

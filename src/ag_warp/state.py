@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 SCHEMA_VERSION = 1
 
@@ -30,7 +30,7 @@ class StateFile(BaseModel):
 
     schema_version: int = SCHEMA_VERSION
     last_apply: str | None = None
-    changes: list[StateChange] = []
+    changes: list[StateChange] = Field(default_factory=list)
 
 
 def load_state(path: Path) -> StateFile:
