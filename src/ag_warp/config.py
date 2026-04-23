@@ -1,12 +1,12 @@
-"""Pydantic configuration model with defaults and file overlay."""
+"""Pydantic configuration model with defaults, file overlay, and CLI overrides."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 type SupervisorBackend = Literal["systemd", "pm2"]
 
@@ -61,8 +61,23 @@ class AppConfig(BaseModel):
     singbox: SingboxConfig = SingboxConfig()
     nftables: NftablesConfig = NftablesConfig()
 
+    @model_validator(mode="after")
+    def _validate_ports(self) -> AppConfig:
+        """Ensure WARP proxy port and sing-box listen port don't collide."""
+        if self.warp.proxy_port == self.singbox.listen_port:
+            msg = (
+                f"Port conflict: warp.proxy_port ({self.warp.proxy_port}) "
+                f"and singbox.listen_port ({self.singbox.listen_port}) "
+                f"must be different."
+            )
+            raise ValueError(msg)
+        return self
 
-def _deep_merge(base: dict, overlay: dict) -> dict:
+
+# -- config loading & merging ------------------------------------------------
+
+
+def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
     """Recursively merge overlay into base. Lists are replaced, not merged."""
     merged = base.copy()
     for key, value in overlay.items():
@@ -73,17 +88,50 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
     return merged
 
 
-def load_config(config_path: Path | None = None) -> AppConfig:
-    """Load configuration from file, merged with built-in defaults.
+def load_config(
+    config_path: Path | None = None,
+    *,
+    cli_overrides: dict[str, Any] | None = None,
+) -> AppConfig:
+    """Load configuration with three-layer precedence.
 
-    If *config_path* is ``None`` or the file does not exist, pure defaults are
-    used.  The user file only needs to specify fields they want to override.
+    Priority (highest → lowest):
+        1. CLI flags (``cli_overrides``)
+        2. Config file (``config_path``)
+        3. Built-in defaults
+
+    ``cli_overrides`` uses dotted-path keys::
+
+        {"warp.proxy_port": 50000, "singbox.listen_port": 54321}
     """
+    defaults = AppConfig().model_dump(mode="python")
+    data = dict(defaults)
+
+    # Layer 2: config file.
     if config_path and config_path.exists():
         with config_path.open() as f:
             user_data = json.load(f)
-        # Merge user overrides onto defaults.
-        defaults = AppConfig().model_dump(mode="python")
-        merged = _deep_merge(defaults, user_data)
-        return AppConfig.model_validate(merged)
-    return AppConfig()
+        data = _deep_merge(data, user_data)
+
+    # Layer 1: CLI overrides.
+    if cli_overrides:
+        data = _deep_merge(data, _expand_dotted(cli_overrides))
+
+    return AppConfig.model_validate(data)
+
+
+def _expand_dotted(flat: dict[str, Any]) -> dict[str, Any]:
+    """Expand dotted keys into nested dicts.
+
+    Example::
+
+        {"warp.proxy_port": 50000}  →  {"warp": {"proxy_port": 50000}}
+    """
+    result: dict[str, Any] = {}
+    for key, value in flat.items():
+        parts = key.split(".")
+        current = result
+        for part in parts[:-1]:
+            current = current.setdefault(part, {})
+        current[parts[-1]] = value
+    return result

@@ -52,3 +52,60 @@ def test_extra_fields_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(Exception):
         load_config(config_file)
+
+
+# -- port conflict tests -------------------------------------------------------
+
+
+def test_port_conflict_raises() -> None:
+    """Same port for WARP and sing-box should fail validation."""
+    with pytest.raises(ValueError, match="Port conflict"):
+        AppConfig.model_validate(
+            {
+                "warp": {"proxy_port": 12345},
+                "singbox": {"listen_port": 12345},
+            }
+        )
+
+
+def test_port_conflict_via_config_file(tmp_path: Path) -> None:
+    """Port conflict from config file should raise."""
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"warp": {"proxy_port": 9999}, "singbox": {"listen_port": 9999}}')
+    with pytest.raises(Exception, match="Port conflict"):
+        load_config(config_file)
+
+
+# -- CLI override tests --------------------------------------------------------
+
+
+def test_cli_overrides() -> None:
+    """CLI flags should override defaults."""
+    cfg = load_config(
+        cli_overrides={"warp.proxy_port": 50000, "singbox.listen_port": 54321},
+    )
+    assert cfg.warp.proxy_port == 50000
+    assert cfg.singbox.listen_port == 54321
+
+
+def test_cli_overrides_beat_file(tmp_path: Path) -> None:
+    """CLI flags should override config file values."""
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"warp": {"proxy_port": 30000}}')
+
+    cfg = load_config(
+        config_file,
+        cli_overrides={"warp.proxy_port": 60000},
+    )
+    assert cfg.warp.proxy_port == 60000
+
+
+def test_cli_override_port_conflict() -> None:
+    """CLI overrides causing a port conflict should fail."""
+    with pytest.raises(Exception, match="Port conflict"):
+        load_config(
+            cli_overrides={
+                "warp.proxy_port": 12345,
+                "singbox.listen_port": 12345,
+            },
+        )
