@@ -4,6 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ag_warp.branding import (
+    DEFAULT_PM2_APP_NAME,
+    DEFAULT_SERVICE_NAME,
+    LEGACY_PM2_APP_NAMES,
+    LEGACY_SERVICE_NAMES,
+    with_legacy_aliases,
+)
 from ag_warp.config import AppConfig
 from ag_warp.shell import Shell
 from ag_warp.ui import console
@@ -12,7 +19,7 @@ from ag_warp.ui import console
 
 _SYSTEMD_TEMPLATE = """\
 [Unit]
-Description=ag-warp sing-box transparent adapter
+Description=ag-wrap sing-box transparent adapter
 After=network-online.target warp-svc.service
 Wants=network-online.target
 
@@ -52,20 +59,24 @@ def stop_service(config: AppConfig, shell: Shell) -> None:
 
 def is_running(config: AppConfig, shell: Shell) -> bool:
     """Check whether the sing-box service is currently running."""
-    if config.supervisor.backend == "systemd":
-        r = shell.run_read(
-            [
-                "systemctl",
-                "is-active",
-                "--quiet",
-                config.singbox.service_name,
-            ]
-        )
-        return r.returncode == 0
+    return active_label(config, shell) is not None
 
-    r = shell.run_read(["pm2", "pid", config.singbox.pm2_app_name])
-    pid = r.stdout.strip()
-    return r.returncode == 0 and pid not in ("", "0")
+
+def active_label(config: AppConfig, shell: Shell) -> str | None:
+    """Return the running service/app label, including legacy names."""
+    if config.supervisor.backend == "systemd":
+        for svc in _systemd_service_names(config):
+            r = shell.run_read(["systemctl", "is-active", "--quiet", svc])
+            if r.returncode == 0:
+                return svc
+        return None
+
+    for app_name in _pm2_app_names(config):
+        r = shell.run_read(["pm2", "pid", app_name])
+        pid = r.stdout.strip()
+        if r.returncode == 0 and pid not in ("", "0"):
+            return app_name
+    return None
 
 
 # -- systemd -------------------------------------------------------------------
@@ -75,6 +86,7 @@ def _ensure_systemd(config: AppConfig, shell: Shell, config_changed: bool) -> bo
     svc = config.singbox.service_name
     unit_path = _SYSTEMD_UNIT_DIR / f"{svc}.service"
     singbox_binary = _resolve_singbox_binary(shell)
+    _disable_legacy_systemd_units(config, shell)
 
     # Generate / update unit file.
     new_unit = _render_systemd_unit(config.singbox.config_path, singbox_binary)
@@ -112,9 +124,9 @@ def _ensure_systemd(config: AppConfig, shell: Shell, config_changed: bool) -> bo
 
 
 def _stop_systemd(config: AppConfig, shell: Shell) -> None:
-    svc = config.singbox.service_name
-    console.print(f"  Stopping and disabling {svc} …")
-    shell.run(["systemctl", "disable", "--now", svc], check=False)
+    for svc in _systemd_service_names(config):
+        console.print(f"  Stopping and disabling {svc} …")
+        shell.run(["systemctl", "disable", "--now", svc], check=False)
 
 
 # -- PM2 -----------------------------------------------------------------------
@@ -123,6 +135,7 @@ def _stop_systemd(config: AppConfig, shell: Shell) -> None:
 def _ensure_pm2(config: AppConfig, shell: Shell, config_changed: bool) -> bool:
     app_name = config.singbox.pm2_app_name
     singbox_binary = _resolve_singbox_binary(shell)
+    _delete_legacy_pm2_apps(config, shell)
 
     r = shell.run_read(["pm2", "pid", app_name])
     pid = r.stdout.strip()
@@ -155,9 +168,9 @@ def _ensure_pm2(config: AppConfig, shell: Shell, config_changed: bool) -> bool:
 
 
 def _stop_pm2(config: AppConfig, shell: Shell) -> None:
-    app_name = config.singbox.pm2_app_name
-    console.print(f"  Deleting PM2 app {app_name} …")
-    shell.run(["pm2", "delete", app_name], check=False)
+    for app_name in _pm2_app_names(config):
+        console.print(f"  Deleting PM2 app {app_name} …")
+        shell.run(["pm2", "delete", app_name], check=False)
     shell.run(["pm2", "save"], check=False)
 
 
@@ -172,3 +185,40 @@ def _render_systemd_unit(config_path: Path, singbox_binary: str) -> str:
         config_path=config_path,
         singbox_binary=singbox_binary,
     )
+
+
+def _systemd_service_names(config: AppConfig) -> tuple[str, ...]:
+    return with_legacy_aliases(
+        config.singbox.service_name,
+        DEFAULT_SERVICE_NAME,
+        LEGACY_SERVICE_NAMES,
+    )
+
+
+def _pm2_app_names(config: AppConfig) -> tuple[str, ...]:
+    return with_legacy_aliases(
+        config.singbox.pm2_app_name,
+        DEFAULT_PM2_APP_NAME,
+        LEGACY_PM2_APP_NAMES,
+    )
+
+
+def _disable_legacy_systemd_units(config: AppConfig, shell: Shell) -> None:
+    if config.singbox.service_name != DEFAULT_SERVICE_NAME:
+        return
+
+    for svc in LEGACY_SERVICE_NAMES:
+        if svc == config.singbox.service_name:
+            continue
+        shell.run(["systemctl", "disable", "--now", svc], check=False)
+
+
+def _delete_legacy_pm2_apps(config: AppConfig, shell: Shell) -> None:
+    if config.singbox.pm2_app_name != DEFAULT_PM2_APP_NAME:
+        return
+
+    for app_name in LEGACY_PM2_APP_NAMES:
+        if app_name == config.singbox.pm2_app_name:
+            continue
+        shell.run(["pm2", "delete", app_name], check=False)
+        shell.run(["pm2", "save"], check=False)

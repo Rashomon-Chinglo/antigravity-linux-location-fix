@@ -1,4 +1,4 @@
-"""ag-warp CLI — thin argument-parsing layer.
+"""ag-wrap CLI — thin argument-parsing layer.
 
 All business logic lives in :mod:`ag_warp.engine`.
 This module only handles:
@@ -22,6 +22,7 @@ from typing import Annotated, Any
 import typer
 
 from ag_warp import __version__
+from ag_warp.branding import APP_NAME, DEFAULT_LOCK_PATH, command_label
 from ag_warp.config import AppConfig, load_config
 from ag_warp.engine import (
     OffOptions,
@@ -38,7 +39,7 @@ from ag_warp.ui import console, render_command_header
 from ag_warp.verify import print_results, run_verify
 
 app = typer.Typer(
-    name="ag-warp",
+    name=APP_NAME,
     help=(
         'Fix for "User location is not supported for the API use." '
         "on Linux VPS. GID-based nftables transparent proxy through "
@@ -77,7 +78,7 @@ SingboxPortOption = Annotated[
     ),
 ]
 
-LOCK_PATH = Path("/var/run/ag-warp.lock")
+LOCK_PATH = DEFAULT_LOCK_PATH
 
 # Exit codes.
 EXIT_OK = 0
@@ -105,7 +106,7 @@ def _acquire_lock() -> Iterator[None]:
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        console.print("[red]✗ Another ag-warp instance is running.[/red]")
+        console.print(f"[red]✗ Another {APP_NAME} instance is running.[/red]")
         raise SystemExit(EXIT_FAILURE)
     try:
         yield
@@ -301,7 +302,7 @@ def verify(
         singbox_port=singbox_port,
     )
 
-    console.print(f"{render_command_header('ag-warp verify')}\n")
+    console.print(f"{render_command_header(command_label('verify'))}\n")
     results = run_verify(runtime.config, runtime.shell)
     all_ok = print_results(results)
 
@@ -336,14 +337,16 @@ def doctor(config: ConfigOption = None) -> None:
     """Check system dependencies."""
     runtime = _build_runtime(config_path=config, dry_run=False)
 
-    console.print(f"{render_command_header('ag-warp doctor')}\n")
+    console.print(f"{render_command_header(command_label('doctor'))}\n")
     ok = doctor_check(runtime.config, runtime.shell, verbose=True)
 
     console.print()
     if ok:
         console.print("[green]All dependencies present.[/green]")
     else:
-        console.print("[red]Missing dependencies. Install them before running 'ag-warp on'.[/red]")
+        console.print(
+            f"[red]Missing dependencies. Install them before running '{command_label('on')}'.[/red]"
+        )
         raise SystemExit(EXIT_DEPENDENCY_MISSING)
 
 
@@ -359,7 +362,7 @@ def _main(
     ] = False,
 ) -> None:
     if version:
-        console.print(f"ag-warp {__version__}")
+        console.print(f"{APP_NAME} {__version__}")
         raise typer.Exit()
     if ctx.invoked_subcommand is None:
         console.print(ctx.get_help())

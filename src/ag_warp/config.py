@@ -8,6 +8,15 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ag_warp.branding import (
+    DEFAULT_CONFIG_PATH,
+    DEFAULT_GROUP_NAME,
+    DEFAULT_NFT_TABLE_NAME,
+    DEFAULT_PM2_APP_NAME,
+    DEFAULT_SERVICE_NAME,
+    DEFAULT_STATE_FILE,
+)
+
 type SupervisorBackend = Literal["systemd", "pm2"]
 type Port = Annotated[int, Field(ge=1, le=65535)]
 
@@ -30,16 +39,16 @@ class SingboxConfig(BaseModel):
 
     listen_host: str = "127.0.0.1"
     listen_port: Port = 12345
-    service_name: str = "ag-warp-singbox"
-    pm2_app_name: str = "sing-box-ag-warp"
-    config_path: Path = Path("/etc/ag-warp/sing-box.json")
+    service_name: str = DEFAULT_SERVICE_NAME
+    pm2_app_name: str = DEFAULT_PM2_APP_NAME
+    config_path: Path = DEFAULT_CONFIG_PATH
 
 
 class NftablesConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     table_family: str = "inet"
-    table_name: str = "ag_warp"
+    table_name: str = DEFAULT_NFT_TABLE_NAME
     redirect_tcp_ports: list[Port] = Field(default_factory=lambda: [80, 443])
     block_udp_ports: list[Port] = Field(default_factory=lambda: [443])
     block_public_ipv6: bool = True
@@ -59,9 +68,9 @@ class AppConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    group_name: str = "antigravity-warp"
+    group_name: str = DEFAULT_GROUP_NAME
     antigravity_base_dir: Path = Path("/root/.antigravity-server/bin")
-    state_file: Path = Path("/var/lib/ag-warp/state.json")
+    state_file: Path = DEFAULT_STATE_FILE
     pin_version: str | None = None
 
     supervisor: SupervisorConfig = Field(default_factory=SupervisorConfig)

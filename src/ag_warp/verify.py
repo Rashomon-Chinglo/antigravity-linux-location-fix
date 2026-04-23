@@ -1,4 +1,4 @@
-"""End-to-end verification of the ag-warp routing chain."""
+"""End-to-end verification of the ag-wrap routing chain."""
 
 from __future__ import annotations
 

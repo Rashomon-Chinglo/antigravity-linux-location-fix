@@ -38,16 +38,16 @@ The project routes only the Antigravity process tree through Cloudflare WARP by 
 env UV_CACHE_DIR=/tmp/uv-cache uv run pytest -q
 env UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
 env UV_CACHE_DIR=/tmp/uv-cache uv run python -m ag_warp --help
-env UV_CACHE_DIR=/tmp/uv-cache uv run ag-warp status
-env UV_CACHE_DIR=/tmp/uv-cache uv run ag-warp on --dry-run
+env UV_CACHE_DIR=/tmp/uv-cache uv run ag-wrap status
+env UV_CACHE_DIR=/tmp/uv-cache uv run ag-wrap on --dry-run
 ```
 
 ## Binary Release Flow
 
 1. Update version strings in `pyproject.toml` and `src/ag_warp/__init__.py`
 2. Commit and push changes
-3. Create and push a tag like `v1.0.1`
-4. GitHub Actions builds `ag-warp-<tag>-linux-x86_64`
+3. Create and push a tag like `vX.Y.Z`
+4. GitHub Actions builds `ag-wrap-<tag>-linux-x86_64`
 5. The workflow uploads the binary to the matching GitHub Release
 
 ## Runtime Dependencies

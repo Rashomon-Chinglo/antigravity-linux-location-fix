@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ag_warp.branding import DEFAULT_NFT_TABLE_NAME, LEGACY_NFT_TABLE_NAMES, with_legacy_aliases
 from ag_warp.config import NftablesConfig
 from ag_warp.shell import Shell
 from ag_warp.ui import console
@@ -120,11 +121,9 @@ def apply_rules(
     """Apply nftables rules, replacing any existing table."""
     rules = generate_rules(config, gid, redirect_port, docker_cidrs)
 
-    # Delete existing table first (ignore error if absent).
-    shell.run(
-        ["nft", "delete", "table", config.table_family, config.table_name],
-        check=False,
-    )
+    # Delete existing tables first (ignore error if absent).
+    for table_name in _managed_table_names(config):
+        shell.run(["nft", "delete", "table", config.table_family, table_name], check=False)
 
     console.print(f"  Applying nftables table {config.table_family} {config.table_name} …")
     shell.run(["nft", "-f", "-"], input_text=rules)
@@ -132,22 +131,28 @@ def apply_rules(
 
 def remove_rules(config: NftablesConfig, shell: Shell) -> None:
     """Remove the nftables table."""
-    console.print(f"  Removing nftables table {config.table_family} {config.table_name} …")
-    shell.run(
-        ["nft", "delete", "table", config.table_family, config.table_name],
-        check=False,
-    )
+    for table_name in _managed_table_names(config):
+        console.print(f"  Removing nftables table {config.table_family} {table_name} …")
+        shell.run(["nft", "delete", "table", config.table_family, table_name], check=False)
 
 
 def table_exists(config: NftablesConfig, shell: Shell) -> bool:
     """Check whether the nftables table exists."""
-    r = shell.run_read(
-        [
-            "nft",
-            "list",
-            "table",
-            config.table_family,
-            config.table_name,
-        ]
+    return active_table_name(config, shell) is not None
+
+
+def active_table_name(config: NftablesConfig, shell: Shell) -> str | None:
+    """Return the active table name, including legacy aliases."""
+    for table_name in _managed_table_names(config):
+        r = shell.run_read(["nft", "list", "table", config.table_family, table_name])
+        if r.returncode == 0:
+            return table_name
+    return None
+
+
+def _managed_table_names(config: NftablesConfig) -> tuple[str, ...]:
+    return with_legacy_aliases(
+        config.table_name,
+        DEFAULT_NFT_TABLE_NAME,
+        LEGACY_NFT_TABLE_NAMES,
     )
-    return r.returncode == 0

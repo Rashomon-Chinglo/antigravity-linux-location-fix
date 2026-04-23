@@ -77,8 +77,8 @@ jobs:
           else
             version="manual-${GITHUB_SHA::7}"
           fi
-          asset_name="ag-warp-${version}-linux-x86_64"
-          cp build/ag-warp "dist/${asset_name}"
+          asset_name="ag-wrap-${version}-linux-x86_64"
+          cp build/ag-wrap "dist/${asset_name}"
           chmod +x "dist/${asset_name}"
           echo "asset_name=${asset_name}" >> "$GITHUB_OUTPUT"
           echo "asset_path=dist/${asset_name}" >> "$GITHUB_OUTPUT"

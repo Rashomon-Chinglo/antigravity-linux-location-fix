@@ -9,6 +9,8 @@
 
 It works by routing only the Antigravity remote server process tree through Cloudflare WARP with Linux GID-based `nftables` rules. Everything else on the host stays on the normal network path.
 
+The end-user CLI and release binary are named `ag-wrap`. The Python module name stays `ag_warp`.
+
 ## Problem
 
 Typical symptoms:
@@ -54,7 +56,7 @@ Download the latest Linux `x86_64` binary from:
 Release assets are published with names like:
 
 ```text
-ag-warp-v1.0.1-linux-x86_64
+ag-wrap-vX.Y.Z-linux-x86_64
 ```
 
 ### Install from Source
@@ -85,39 +87,39 @@ Important:
 
 - The binary removes the Python runtime requirement for end users
 - It does not remove the system runtime requirements above
-- Running `ag-warp on`, `off`, or `rollback` still requires appropriate Linux permissions
+- Running `ag-wrap on`, `off`, or `rollback` still requires appropriate Linux permissions
 
 ## Quick Start
 
 ```bash
 # Check runtime dependencies
-ag-warp doctor
+ag-wrap doctor
 
 # Preview changes
-ag-warp on --dry-run
+ag-wrap on --dry-run
 
 # Apply changes
-ag-warp on
+ag-wrap on
 
 # Or apply non-interactively
-ag-warp on --yes
+ag-wrap on --yes
 
 # Verify the routing chain end-to-end
-ag-warp verify
+ag-wrap verify
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `ag-warp status` | Read-only status check of all components |
-| `ag-warp on` | Start and converge all components to desired state |
-| `ag-warp apply` | Alias for `on` |
-| `ag-warp off` | Stop runtime interception while keeping wrapper/state |
-| `ag-warp rollback` | Full rollback: `off` + safe wrapper restore |
-| `ag-warp verify` | End-to-end verification |
-| `ag-warp doctor` | Check dependencies |
-| `ag-warp dump-config` | Print final merged configuration |
+| `ag-wrap status` | Read-only status check of all components |
+| `ag-wrap on` | Start and converge all components to desired state |
+| `ag-wrap apply` | Alias for `on` |
+| `ag-wrap off` | Stop runtime interception while keeping wrapper/state |
+| `ag-wrap rollback` | Full rollback: `off` + safe wrapper restore |
+| `ag-wrap verify` | End-to-end verification |
+| `ag-wrap doctor` | Check dependencies |
+| `ag-wrap dump-config` | Print final merged configuration |
 
 Common flags:
 
@@ -147,7 +149,7 @@ See [config.example.json](config.example.json) for all fields.
 Use:
 
 ```bash
-ag-warp dump-config
+ag-wrap dump-config
 ```
 
 to inspect the final merged config.
@@ -174,7 +176,7 @@ uv run --with nuitka==4.0.5 python tools/build_binary.py
 Expected output:
 
 ```text
-dist/nuitka/ag-warp
+dist/nuitka/ag-wrap
 ```
 
 Notes:
@@ -189,13 +191,13 @@ The workflow [nuitka-release.yml](.github/workflows/nuitka-release.yml) does the
 1. Runs `pytest` and `ruff`
 2. Builds a Linux `x86_64` onefile binary with Nuitka
 3. Uploads the binary as a GitHub Actions artifact
-4. On tag pushes like `v1.0.1`, creates or updates the matching GitHub Release and uploads the binary there
+4. On tag pushes like `vX.Y.Z`, creates or updates the matching GitHub Release and uploads the binary there
 
 To publish a release binary:
 
 ```bash
-git tag v1.0.1
-git push origin v1.0.1
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 After the workflow finishes, the binary appears on the repository Releases page.
@@ -207,6 +209,12 @@ uv sync
 uv run pytest -q
 uv run ruff check .
 uv run python -m ag_warp --help
+```
+
+For end users, prefer the installed CLI:
+
+```bash
+ag-wrap --help
 ```
 
 ## Notes for Contributors

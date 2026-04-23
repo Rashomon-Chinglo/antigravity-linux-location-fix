@@ -1,7 +1,7 @@
 {
   "group_name": "antigravity-warp",
   "antigravity_base_dir": "/root/.antigravity-server/bin",
-  "state_file": "/var/lib/ag-warp/state.json",
+  "state_file": "/var/lib/ag-wrap/state.json",
 
   "supervisor": {
     "backend": "systemd"
@@ -15,14 +15,14 @@
   "singbox": {
     "listen_host": "127.0.0.1",
     "listen_port": 12345,
-    "service_name": "ag-warp-singbox",
-    "pm2_app_name": "sing-box-ag-warp",
-    "config_path": "/etc/ag-warp/sing-box.json"
+    "service_name": "ag-wrap-singbox",
+    "pm2_app_name": "sing-box-ag-wrap",
+    "config_path": "/etc/ag-wrap/sing-box.json"
   },
 
   "nftables": {
     "table_family": "inet",
-    "table_name": "ag_warp",
+    "table_name": "ag_wrap",
     "redirect_tcp_ports": [80, 443],
     "block_udp_ports": [443],
     "block_public_ipv6": true,

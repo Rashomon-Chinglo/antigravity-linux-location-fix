@@ -1,3 +1,3 @@
-"""antigravity-linux-location-fix: ag-warp CLI."""
+"""antigravity-linux-location-fix: ag-wrap CLI."""
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"

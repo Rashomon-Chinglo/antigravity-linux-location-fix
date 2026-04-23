@@ -7,10 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-type WrapperStatus = Literal["wrapped", "unwrapped", "stale", "unknown"]
+from ag_warp.branding import WRAPPER_MARKERS
 
-# Marker lines embedded in wrapper scripts (current and legacy).
-WRAPPER_MARKERS = ("# ag-warp wrapper", "# antigravity-warp wrapper")
+type WrapperStatus = Literal["wrapped", "unwrapped", "stale", "unknown"]
 
 
 @dataclass
@@ -33,7 +32,7 @@ class AntigravityVersion:
             return "unknown"
 
         has_real = real.exists()
-        is_wrapper = _is_ag_warp_wrapper(server)
+        is_wrapper = _is_managed_wrapper(server)
 
         if is_wrapper and has_real:
             return "wrapped"
@@ -110,8 +109,8 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def _is_ag_warp_wrapper(path: Path) -> bool:
-    """Check whether *path* contains any ag-warp wrapper marker."""
+def _is_managed_wrapper(path: Path) -> bool:
+    """Check whether *path* contains any managed wrapper marker."""
     try:
         content = path.read_text(errors="replace")
         return any(marker in content for marker in WRAPPER_MARKERS)

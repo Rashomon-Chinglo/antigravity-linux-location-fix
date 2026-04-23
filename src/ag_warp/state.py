@@ -9,6 +9,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ag_warp.branding import DEFAULT_STATE_FILE, LEGACY_STATE_FILES, preferred_existing_path
+
 SCHEMA_VERSION = 1
 
 
@@ -35,8 +37,9 @@ class StateFile(BaseModel):
 
 def load_state(path: Path) -> StateFile:
     """Load state from disk. Returns empty state if file is missing."""
-    if path.exists():
-        with path.open() as f:
+    resolved_path = preferred_existing_path(path, DEFAULT_STATE_FILE, LEGACY_STATE_FILES)
+    if resolved_path.exists():
+        with resolved_path.open() as f:
             data = json.load(f)
         return StateFile.model_validate(data)
     return StateFile()

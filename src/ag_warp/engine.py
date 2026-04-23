@@ -18,6 +18,7 @@ from ag_warp import singbox as sb_mod
 from ag_warp import supervisor as sv_mod
 from ag_warp import warp as warp_mod
 from ag_warp import wrapper as wrapper_mod
+from ag_warp.branding import command_label
 from ag_warp.config import AppConfig
 from ag_warp.discovery import discover_latest, discover_versions
 from ag_warp.shell import Shell
@@ -59,7 +60,7 @@ def _print_restart_notice(shell: Shell) -> None:
 
 def run_status(cfg: AppConfig, shell: Shell) -> None:
     """Read-only status check of all components."""
-    console.print(f"{render_command_header('ag-warp status')}\n")
+    console.print(f"{render_command_header(command_label('status'))}\n")
 
     # WARP.
     ws = warp_mod.get_status(shell)
@@ -67,15 +68,16 @@ def run_status(cfg: AppConfig, shell: Shell) -> None:
 
     # sing-box.
     sb_running = sv_mod.is_running(cfg, shell)
-    sb_label = _service_label(cfg)
+    sb_label = sv_mod.active_label(cfg, shell) or _service_label(cfg)
     _status_line(f"sing-box ({cfg.supervisor.backend})", sb_running, sb_label)
 
     # nftables.
     nft_ok = nft_mod.table_exists(cfg.nftables, shell)
+    nft_label = nft_mod.active_table_name(cfg.nftables, shell) or cfg.nftables.table_name
     _status_line(
         "nftables",
         nft_ok,
-        f"{cfg.nftables.table_family} {cfg.nftables.table_name}",
+        f"{cfg.nftables.table_family} {nft_label}",
     )
 
     # Antigravity versions.
@@ -117,15 +119,15 @@ def _print_versions(cfg: AppConfig, nft_ok: bool) -> None:
     if latest.wrapper_status == "unwrapped":
         console.print()
         console.print(f"  [yellow]Detected unwrapped version: {latest.version[:40]}[/yellow]")
-        console.print("  Suggested: [bold]ag-warp on[/bold]")
+        console.print(f"  Suggested: [bold]{command_label('on')}[/bold]")
 
     if latest.wrapper_status == "wrapped" and not nft_ok:
         console.print()
         console.print(
             "  [yellow]⚠ Wrapper is active but nftables not applied.[/yellow]\n"
             "    Traffic is NOT routed through WARP.\n"
-            "    Run [bold]ag-warp on[/bold] to re-enable, "
-            "or [bold]ag-warp rollback[/bold] to fully remove."
+            f"    Run [bold]{command_label('on')}[/bold] to re-enable, "
+            f"or [bold]{command_label('rollback')}[/bold] to fully remove."
         )
 
 
@@ -156,7 +158,7 @@ class OnOptions:
 
 def run_on(cfg: AppConfig, shell: Shell, opts: OnOptions) -> None:
     """Start and converge all components to desired state."""
-    console.print(f"{render_command_header('ag-warp on', dry_run=opts.dry_run)}\n")
+    console.print(f"{render_command_header(command_label('on'), dry_run=opts.dry_run)}\n")
 
     # 1. Doctor.
     if not doctor_check(cfg, shell):
@@ -284,7 +286,7 @@ class OffOptions:
 
 def run_off(cfg: AppConfig, shell: Shell, opts: OffOptions) -> None:
     """Stop runtime interception (keep wrapper, keep state)."""
-    console.print(f"{render_command_header('ag-warp off', dry_run=opts.dry_run)}\n")
+    console.print(f"{render_command_header(command_label('off'), dry_run=opts.dry_run)}\n")
 
     sv_mod.stop_service(cfg, shell)
     _ok("sing-box stopped")
@@ -314,7 +316,9 @@ class RollbackOptions:
 
 def run_rollback(cfg: AppConfig, shell: Shell, opts: RollbackOptions) -> None:
     """Full rollback: off + safe wrapper restore."""
-    console.print(f"{render_command_header('ag-warp rollback', dry_run=opts.dry_run)}\n")
+    console.print(
+        f"{render_command_header(command_label('rollback'), dry_run=opts.dry_run)}\n"
+    )
 
     if not opts.yes:
         proceed = typer.confirm(

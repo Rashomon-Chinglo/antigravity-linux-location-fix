@@ -34,7 +34,7 @@ def test_inject_wrapper(tmp_path: Path) -> None:
     # Wrapper should exist and contain marker.
     assert version.server_binary.exists()
     content = version.server_binary.read_text()
-    assert "# ag-warp wrapper" in content
+    assert "# ag-wrap wrapper" in content
     assert "antigravity-warp" in content
 
     # .real should exist.

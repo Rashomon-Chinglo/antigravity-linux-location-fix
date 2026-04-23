@@ -22,7 +22,7 @@ def _make_version(
 
     server = bin_dir / "antigravity-server"
     if wrapper:
-        server.write_text("#!/usr/bin/env sh\n# ag-warp wrapper\nexec true\n")
+        server.write_text("#!/usr/bin/env sh\n# ag-wrap wrapper\nexec true\n")
     else:
         server.write_bytes(b"\x7fELF_FAKE_BINARY")
     server.chmod(stat.S_IRWXU)

@@ -13,7 +13,7 @@ def test_render_systemd_unit_uses_resolved_binary() -> None:
 
     unit = _render_systemd_unit(cfg.singbox.config_path, "/usr/bin/sing-box")
 
-    assert "ExecStart=/usr/bin/sing-box run -c /etc/ag-warp/sing-box.json" in unit
+    assert "ExecStart=/usr/bin/sing-box run -c /etc/ag-wrap/sing-box.json" in unit
 
 
 def test_pm2_start_uses_resolved_binary() -> None:
@@ -36,4 +36,7 @@ def test_pm2_start_uses_resolved_binary() -> None:
         changed = _ensure_pm2(cfg, shell, config_changed=False)
 
     assert changed is True
-    assert mock_run.call_args_list[0].args[0][:3] == ["pm2", "start", "/usr/bin/sing-box"]
+    commands = [call.args[0] for call in mock_run.call_args_list]
+
+    assert ["pm2", "delete", "sing-box-ag-warp"] in commands
+    assert any(command[:3] == ["pm2", "start", "/usr/bin/sing-box"] for command in commands)

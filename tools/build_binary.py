@@ -10,6 +10,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ENTRYPOINT = ROOT / "src" / "ag_warp" / "__main__.py"
 OUTPUT_DIR = ROOT / "dist" / "nuitka"
+RICH_INCLUDE_PACKAGE = "rich._unicode_data"
+
+
+def build_command(python_executable: str) -> list[str]:
+    """Return the Nuitka build command for the project."""
+    return [
+        python_executable,
+        "-m",
+        "nuitka",
+        "--mode=onefile",
+        "--assume-yes-for-downloads",
+        f"--output-dir={OUTPUT_DIR}",
+        f"--include-package={RICH_INCLUDE_PACKAGE}",
+        str(ENTRYPOINT),
+    ]
 
 
 def main() -> int:
@@ -21,21 +36,13 @@ def main() -> int:
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    cmd = [
-        sys.executable,
-        "-m",
-        "nuitka",
-        "--mode=onefile",
-        "--assume-yes-for-downloads",
-        f"--output-dir={OUTPUT_DIR}",
-        str(ENTRYPOINT),
-    ]
+    cmd = build_command(sys.executable)
 
     print(f"Using compiler: {compiler}")
     print("Running:", " ".join(cmd))
     subprocess.run(cmd, check=True, cwd=ROOT)
 
-    binary_path = OUTPUT_DIR / "ag-warp"
+    binary_path = OUTPUT_DIR / "ag-wrap"
     print(f"Built binary: {binary_path}")
     return 0
 
