@@ -1,0 +1,31 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "inbounds": [
+    {
+      "type": "redirect",
+      "tag": "ag-redirect",
+      "listen": "127.0.0.1",
+      "listen_port": 12345,
+      "sniff": true,
+      "sniff_override_destination": false
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "http",
+      "tag": "warp-proxy",
+      "server": "127.0.0.1",
+      "server_port": 40000
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "final": "warp-proxy"
+  }
+}
