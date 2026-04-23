@@ -1,6 +1,6 @@
 [project]
 name = "antigravity-linux-location-fix"
-version = "1.1.0"
+version = "1.2.0"
 description = 'Fix "User location is not supported for the API use." (FAILED_PRECONDITION) for Antigravity Remote SSH on Linux VPS by routing only the Antigravity process tree through Cloudflare WARP.'
 readme = "README.md"
 license = { text = "MIT" }
@@ -19,7 +19,6 @@ Releases = "https://github.com/Rashomon-Chinglo/antigravity-linux-location-fix/r
 
 [project.scripts]
 ag-wrap = "ag_warp.cli:app"
-ag-warp = "ag_warp.cli:app"
 
 [build-system]
 requires = ["hatchling"]
