@@ -28,6 +28,7 @@ from ag_warp.engine import (
     OffOptions,
     OnOptions,
     RollbackOptions,
+    print_antigravity_restart_guidance,
     run_off,
     run_on,
     run_rollback,
@@ -338,6 +339,7 @@ def verify(
     console.print(f"{render_command_header(command_label('verify'))}\n")
     results = run_verify(runtime.config, runtime.shell)
     all_ok = print_results(results)
+    print_antigravity_restart_guidance(runtime.shell, warn=False)
 
     console.print()
     if all_ok:

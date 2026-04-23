@@ -115,6 +115,9 @@ def _check_warp_routing(gid: int, shell: Shell) -> CheckResult:
 def _check_direct_routing(shell: Shell) -> CheckResult:
     r = shell.run_read(
         [
+            "setpriv",
+            "--regid=0",
+            "--clear-groups",
             "curl",
             "-sf",
             "-m5",

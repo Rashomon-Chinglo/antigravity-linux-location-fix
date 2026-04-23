@@ -49,10 +49,6 @@ _BASE_REQUIRED = [
     "getent",
 ]
 
-# Optional commands (informational only).
-_OPTIONAL = ["docker"]
-
-
 def doctor_check(cfg: AppConfig, shell: Shell, *, verbose: bool = False) -> bool:
     """Return ``True`` if all required system commands are present."""
     required = _required_commands()
@@ -82,13 +78,6 @@ def doctor_check(cfg: AppConfig, shell: Shell, *, verbose: bool = False) -> bool
         )
     if not warp_service_ok:
         all_ok = False
-
-    if verbose:
-        for cmd in _OPTIONAL:
-            found = shell.has_command(cmd)
-            icon = "[green]✓[/green]" if found else "[dim]○[/dim]"
-            suffix = "" if found else " (optional)"
-            console.print(f"  {icon} {cmd}{suffix}")
 
     return all_ok
 

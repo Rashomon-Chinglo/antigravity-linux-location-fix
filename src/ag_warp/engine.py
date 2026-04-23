@@ -46,13 +46,55 @@ def _fail(msg: str) -> None:
     console.print(f"  [red]✗[/red] {msg}")
 
 
-def _print_restart_notice(shell: Shell) -> None:
+def print_antigravity_restart_guidance(
+    shell: Shell,
+    *,
+    warn: bool = True,
+    prompt_kill: bool = False,
+) -> None:
     if is_antigravity_running(shell):
         console.print()
+        if warn:
+            console.print(
+                "[yellow]⚠  Antigravity is currently running. "
+                "Wrapper or routing changes apply after you reload the "
+                "Antigravity Remote SSH window.[/yellow]"
+            )
+            console.print(
+                "[dim]Caution: from a separate SSH session, you can force a restart "
+                "with: pkill -f antigravity-server[/dim]"
+            )
+        else:
+            console.print(
+                "[dim]Antigravity is currently running. If you just changed wrapper "
+                "or routing, reload the Antigravity Remote SSH window. From a "
+                "separate SSH session, you can force a restart with: "
+                "pkill -f antigravity-server[/dim]"
+            )
+        if not prompt_kill:
+            return
+        if not shell.has_command("pkill"):
+            console.print(
+                "[dim]pkill is not available on this host. "
+                "Kill the process manually if needed.[/dim]"
+            )
+            return
         console.print(
-            "[yellow]⚠  Antigravity is currently running. "
-            "Restart required: reload the Antigravity Remote SSH window.[/yellow]"
+            "[red]CAUTION:[/red] Save any unsaved work first. Killing "
+            "`antigravity-server` will immediately disconnect the current "
+            "Antigravity session."
         )
+        kill_now = typer.confirm(
+            "  Kill antigravity-server now? Prefer doing this from a separate SSH session.",
+            default=False,
+        )
+        if kill_now:
+            console.print("  Killing antigravity-server …")
+            shell.run(["pkill", "-f", "antigravity-server"], check=False)
+            console.print(
+                "[yellow]Antigravity kill signal sent. Reconnect the Antigravity "
+                "Remote SSH window if needed.[/yellow]"
+            )
 
 
 # -- status -------------------------------------------------------------------
@@ -81,6 +123,7 @@ def run_status(cfg: AppConfig, shell: Shell) -> None:
 
     # Antigravity versions.
     _print_versions(cfg, nft_ok)
+    print_antigravity_restart_guidance(shell, warn=False)
 
 
 def _status_line(label: str, ok: bool, detail: str) -> None:
@@ -215,7 +258,10 @@ def run_on(cfg: AppConfig, shell: Shell, opts: OnOptions) -> None:
         save_state(cfg.state_file, state)
 
     # 11. Restart notice.
-    _print_restart_notice(shell)
+    print_antigravity_restart_guidance(
+        shell,
+        prompt_kill=not opts.dry_run and not opts.yes,
+    )
 
     console.print("\n[green]Done.[/green]")
 
@@ -242,7 +288,7 @@ def _handle_wrapper(
                 )
                 if not proceed:
                     console.print("  Skipped wrapper injection.")
-                    _print_restart_notice(shell)
+                    print_antigravity_restart_guidance(shell)
                     raise SystemExit(4)
 
             meta = wrapper_mod.inject_wrapper(latest, cfg.group_name, shell)
@@ -289,7 +335,10 @@ def run_off(cfg: AppConfig, shell: Shell, opts: OffOptions) -> None:
 
     console.print()
     console.print("[dim]Wrapper and state preserved. Use 'rollback' to fully restore.[/dim]")
-    _print_restart_notice(shell)
+    print_antigravity_restart_guidance(
+        shell,
+        prompt_kill=not opts.dry_run,
+    )
 
 
 # -- rollback -----------------------------------------------------------------
@@ -341,5 +390,8 @@ def run_rollback(cfg: AppConfig, shell: Shell, opts: RollbackOptions) -> None:
             console.print("  [yellow]Manual inspection may be needed:[/yellow]")
             console.print(f"    ls -la {latest.bin_dir}/antigravity-server*")
 
-    _print_restart_notice(shell)
+    print_antigravity_restart_guidance(
+        shell,
+        prompt_kill=not opts.dry_run and not opts.yes,
+    )
     console.print("\n[green]Rollback complete.[/green]")

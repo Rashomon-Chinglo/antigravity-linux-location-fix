@@ -1,6 +1,6 @@
 [project]
 name = "antigravity-linux-location-fix"
-version = "1.2.0"
+version = "1.2.1"
 description = 'Fix "User location is not supported for the API use." (FAILED_PRECONDITION) for Antigravity Remote SSH on Linux VPS by routing only the Antigravity process tree through Cloudflare WARP.'
 readme = "README.md"
 license = { text = "MIT" }
